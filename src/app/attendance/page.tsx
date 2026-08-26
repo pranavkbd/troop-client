@@ -11,24 +11,41 @@ const formattedToday = new Intl.DateTimeFormat("en-US", {
 }).format(new Date(`${TODAY}T00:00:00`));
 
 export default function AttendancePage() {
-  const checkInTimes = new Map(
-    attendanceRecords
-      .filter((record) => record.date === TODAY && record.status === "present")
-      .map((record) => [record.studentId, record.checkInTime ?? "—"])
+  const todaysRecords = attendanceRecords.filter(
+    (record) => record.date === TODAY && record.status === "present"
   );
 
   const initialPresentStudents = students
-    .filter((student) => checkInTimes.has(student.id))
-    .map((student) => ({
-      student,
-      checkInTime: checkInTimes.get(student.id) ?? "—",
-    }));
+    .flatMap((student) => {
+      const record = todaysRecords.find(
+        (r) => r.studentId === student.id && !r.checkOutTime
+      );
+      return record
+        ? [{ student, checkInTime: record.checkInTime ?? "—" }]
+        : [];
+    });
+
+  const initialCheckedOutStudents = students.flatMap((student) => {
+    const record = todaysRecords.find(
+      (r) => r.studentId === student.id && r.checkOutTime
+    );
+    return record
+      ? [
+          {
+            student,
+            checkInTime: record.checkInTime ?? "—",
+            checkOutTime: record.checkOutTime ?? "—",
+          },
+        ]
+      : [];
+  });
 
   return (
     <AttendanceBoard
       formattedToday={formattedToday}
       allStudents={students}
       initialPresentStudents={initialPresentStudents}
+      initialCheckedOutStudents={initialCheckedOutStudents}
     />
   );
 }
