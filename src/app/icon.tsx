@@ -18,17 +18,18 @@ export default function Icon() {
         }}
       >
         <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
+          width="20"
+          height="15"
+          viewBox="0 0 32 24"
           fill="none"
           stroke="white"
           strokeWidth={3}
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <polyline points="6 17 11 12 6 7" />
-          <polyline points="13 17 18 12 13 7" />
+          <polyline points="2 19 7 12 2 5" strokeOpacity={0.35} />
+          <polyline points="11 19 16 12 11 5" strokeOpacity={0.65} />
+          <polyline points="20 19 25 12 20 5" />
         </svg>
       </div>
     ),

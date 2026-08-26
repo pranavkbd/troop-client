@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronsRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { TroopMark } from "@/components/troop-mark";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -18,8 +18,8 @@ export function SiteHeader() {
   return (
     <header className="border-b bg-card">
       <div className="mx-auto grid h-14 max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-6 px-6">
-        <Link href="/" className="flex items-center gap-1.5">
-          <ChevronsRight className="text-primary h-5 w-5" />
+        <Link href="/" className="flex items-center gap-0">
+          <TroopMark className="text-primary h-4 w-6" />
           <span className="font-heading text-base font-semibold tracking-tight">
             Troop
           </span>
