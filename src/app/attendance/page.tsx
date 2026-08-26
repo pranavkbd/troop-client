@@ -1,36 +1,34 @@
 import { AttendanceBoard } from "@/components/attendance-board";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { attendanceRecords, students } from "@/lib/mock-data";
 
 const TODAY = "2026-08-25";
 
+const formattedToday = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+}).format(new Date(`${TODAY}T00:00:00`));
+
 export default function AttendancePage() {
-  const presentStudentIds = new Set(
+  const checkInTimes = new Map(
     attendanceRecords
       .filter((record) => record.date === TODAY && record.status === "present")
-      .map((record) => record.studentId)
-  );
-  const presentStudents = students.filter((student) =>
-    presentStudentIds.has(student.id)
+      .map((record) => [record.studentId, record.checkInTime ?? "—"])
   );
 
+  const initialPresentStudents = students
+    .filter((student) => checkInTimes.has(student.id))
+    .map((student) => ({
+      student,
+      checkInTime: checkInTimes.get(student.id) ?? "—",
+    }));
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-2xl font-semibold tracking-tight">
-          Attendance
-        </CardTitle>
-        <CardDescription>Mark attendance for {TODAY}.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <AttendanceBoard presentStudents={presentStudents} />
-      </CardContent>
-    </Card>
+    <AttendanceBoard
+      formattedToday={formattedToday}
+      allStudents={students}
+      initialPresentStudents={initialPresentStudents}
+    />
   );
 }
