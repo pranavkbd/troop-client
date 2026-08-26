@@ -1,34 +1,36 @@
 import { AttendanceBoard } from "@/components/attendance-board";
 import {
-  attendanceRecords,
-  enrollments,
-  sessions,
-  students,
-} from "@/lib/mock-data";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { attendanceRecords, students } from "@/lib/mock-data";
 
 const TODAY = "2026-08-25";
-const TODAY_DAY = "Tue";
 
 export default function AttendancePage() {
-  const sessionsToday = sessions.filter((s) => s.dayOfWeek === TODAY_DAY);
-  const recordsToday = attendanceRecords.filter((r) => r.date === TODAY);
+  const presentStudentIds = new Set(
+    attendanceRecords
+      .filter((record) => record.date === TODAY && record.status === "present")
+      .map((record) => record.studentId)
+  );
+  const presentStudents = students.filter((student) =>
+    presentStudentIds.has(student.id)
+  );
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Attendance</h1>
-        <p className="text-muted-foreground text-sm">
-          Mark attendance for today&apos;s sessions.
-        </p>
-      </div>
-
-      <AttendanceBoard
-        date={TODAY}
-        sessions={sessionsToday}
-        students={students}
-        enrollments={enrollments}
-        initialRecords={recordsToday}
-      />
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-2xl font-semibold tracking-tight">
+          Attendance
+        </CardTitle>
+        <CardDescription>Mark attendance for {TODAY}.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AttendanceBoard presentStudents={presentStudents} />
+      </CardContent>
+    </Card>
   );
 }
