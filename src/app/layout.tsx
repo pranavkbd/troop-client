@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { DM_Sans, IBM_Plex_Mono, Lora } from "next/font/google";
 import "./globals.css";
 
+import { SiteHeader } from "@/components/site-header";
+
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
@@ -29,7 +31,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${dmSans.variable} ${ibmPlexMono.variable} ${lora.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteHeader />
+        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8">
+          {children}
+        </main>
+      </body>
     </html>
   );
 }
