@@ -1,9 +1,53 @@
+import { faker } from "@faker-js/faker";
+
 import type {
   AttendanceRecord,
+  AttendanceStatus,
   Enrollment,
+  ExcuseReason,
   Session,
   Student,
+  Subject,
 } from "@/lib/types";
+
+const generatedSubjects = ["Math", "Reading"] as const;
+const generatedStatuses: Student["status"][] = [
+  "active",
+  "active",
+  "active",
+  "active",
+  "active",
+  "active",
+  "paused",
+  "inactive",
+];
+
+function generateStudents(count: number, startNumber: number): Student[] {
+  faker.seed(1234);
+
+  const result: Student[] = [];
+  for (let i = 0; i < count; i++) {
+    const idNumber = startNumber + i;
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    const guardianFirstName = faker.person.firstName();
+    const subject = faker.helpers.arrayElement(generatedSubjects);
+
+    result.push({
+      id: String(100000 + idNumber),
+      firstName,
+      lastName,
+      guardianName: `${guardianFirstName} ${lastName}`,
+      guardianPhone: `(${faker.helpers.arrayElement(["604", "778"])}) 555-${faker.string.numeric(4)}`,
+      levels: {
+        [subject]: `${faker.number.int({ min: 1, max: 7 })}${faker.helpers.arrayElement(["A", "B", "C"])}`,
+      },
+      status: faker.helpers.arrayElement(generatedStatuses),
+      enrolledAt: faker.date.past({ years: 2 }).toISOString().slice(0, 10),
+    });
+  }
+  return result;
+}
 
 export const students: Student[] = [
   {
@@ -206,6 +250,7 @@ export const students: Student[] = [
     status: "inactive",
     enrolledAt: "2023-12-02",
   },
+  ...generateStudents(180, 21),
 ];
 
 export const sessions: Session[] = [
@@ -247,7 +292,7 @@ export const sessions: Session[] = [
   },
 ];
 
-export const enrollments: Enrollment[] = [
+const manualEnrollments: Enrollment[] = [
   { id: "e1", studentId: "100001", sessionId: "sess1", subject: "Math" },
   { id: "e2", studentId: "100001", sessionId: "sess2", subject: "Reading" },
   { id: "e3", studentId: "100002", sessionId: "sess3", subject: "Math" },
@@ -259,6 +304,100 @@ export const enrollments: Enrollment[] = [
   { id: "e9", studentId: "100007", sessionId: "sess4", subject: "Reading" },
   { id: "e10", studentId: "100008", sessionId: "sess4", subject: "Reading" },
 ];
+
+const mathSessionIds = ["sess1", "sess3"];
+const readingSessionIds = ["sess2", "sess4"];
+
+function generateEnrollments(
+  studentsNeedingEnrollment: Student[],
+): Enrollment[] {
+  faker.seed(5678);
+
+  const result: Enrollment[] = [];
+  for (const student of studentsNeedingEnrollment) {
+    for (const subject of Object.keys(student.levels) as Subject[]) {
+      const sessionId = faker.helpers.arrayElement(
+        subject === "Math" ? mathSessionIds : readingSessionIds,
+      );
+      result.push({
+        id: `e-gen-${student.id}-${subject}`,
+        studentId: student.id,
+        sessionId,
+        subject,
+      });
+    }
+  }
+  return result;
+}
+
+const manuallyEnrolledStudentIds = new Set(
+  manualEnrollments.map((enrollment) => enrollment.studentId),
+);
+
+export const enrollments: Enrollment[] = [
+  ...manualEnrollments,
+  ...generateEnrollments(
+    students.filter(
+      (student) =>
+        !manuallyEnrolledStudentIds.has(student.id) &&
+        student.status === "active",
+    ),
+  ),
+];
+
+const excuseReasons: ExcuseReason[] = ["sick", "vacation", "other"];
+const excuseNotesByReason: Record<ExcuseReason, string> = {
+  sick: "Feeling unwell",
+  vacation: "Family trip",
+  other: "Excused by guardian",
+};
+
+function generateExcusedRecords(): AttendanceRecord[] {
+  faker.seed(91011);
+
+  const todaySessionIds = sessions
+    .filter((session) => session.dayOfWeek === "Tue")
+    .map((session) => session.id);
+  const candidates = enrollments.filter(
+    (enrollment) =>
+      todaySessionIds.includes(enrollment.sessionId) &&
+      Number(enrollment.studentId) >= 100021,
+  );
+  const picks = faker.helpers.arrayElements(candidates, 14);
+  const [excusedPicks, unknownPicks] = [picks.slice(0, 10), picks.slice(10)];
+
+  const excusedRecords: AttendanceRecord[] = excusedPicks.map(
+    (enrollment, index) => {
+      const excuseReason = faker.helpers.arrayElement(excuseReasons);
+      const status: AttendanceStatus = faker.helpers.arrayElement([
+        "absent",
+        "excused",
+      ]);
+      return {
+        id: `a-excused-${index}`,
+        studentId: enrollment.studentId,
+        sessionId: enrollment.sessionId,
+        date: "2026-08-25",
+        status,
+        excuseReason,
+        notes: excuseNotesByReason[excuseReason],
+      };
+    },
+  );
+
+  const unknownRecords: AttendanceRecord[] = unknownPicks.map(
+    (enrollment, index) => ({
+      id: `a-unknown-${index}`,
+      studentId: enrollment.studentId,
+      sessionId: enrollment.sessionId,
+      date: "2026-08-25",
+      status: "unknown",
+      notes: "No show, no reason given",
+    }),
+  );
+
+  return [...excusedRecords, ...unknownRecords];
+}
 
 export const attendanceRecords: AttendanceRecord[] = [
   {
@@ -311,6 +450,8 @@ export const attendanceRecords: AttendanceRecord[] = [
     sessionId: "sess2",
     date: "2026-08-25",
     status: "excused",
+    excuseReason: "vacation",
     notes: "Family trip",
   },
+  ...generateExcusedRecords(),
 ];
