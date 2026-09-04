@@ -1,33 +1,90 @@
-import { AttendanceBoard } from "@/components/attendance-board";
-import { attendanceRecords, students } from "@/lib/mock-data";
+import {
+  AttendanceBoard,
+  type ExcusedEntry,
+} from "@/components/attendance-board";
+import {
+  attendanceRecords,
+  enrollments,
+  sessions,
+  students,
+} from "@/lib/mock-data";
 
-const TODAY = "2026-08-25";
+const DEFAULT_DATE = "2026-08-25";
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const formattedToday = new Intl.DateTimeFormat("en-US", {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-}).format(new Date(`${TODAY}T00:00:00`));
+export default async function AttendancePage(props: PageProps<"/attendance">) {
+  const searchParams = await props.searchParams;
+  const rawDate = searchParams.date;
+  const selectedDate =
+    typeof rawDate === "string" && DATE_PATTERN.test(rawDate)
+      ? rawDate
+      : DEFAULT_DATE;
+  const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
 
-export default function AttendancePage() {
-  const todaysRecords = attendanceRecords.filter(
-    (record) => record.date === TODAY && record.status === "present"
+  const selectedDayOfWeek = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  }).format(selectedDateObj);
+
+  const sessionsToday = sessions.filter(
+    (session) => session.dayOfWeek === selectedDayOfWeek,
+  );
+  const sessionStartTimeById = new Map(
+    sessionsToday.map((session) => [session.id, session.startTime]),
   );
 
-  const initialPresentStudents = students
-    .flatMap((student) => {
-      const record = todaysRecords.find(
-        (r) => r.studentId === student.id && !r.checkOutTime
+  const scheduledTimes: Record<string, string> = {};
+  for (const enrollment of enrollments) {
+    const startTime = sessionStartTimeById.get(enrollment.sessionId);
+    if (!startTime) continue;
+    const current = scheduledTimes[enrollment.studentId];
+    if (!current || startTime < current) {
+      scheduledTimes[enrollment.studentId] = startTime;
+    }
+  }
+
+  const todaysRecords = attendanceRecords.filter(
+    (record) => record.date === selectedDate && record.status === "present",
+  );
+
+  const initialExcusedStudents: ExcusedEntry[] = students.flatMap(
+    (student): ExcusedEntry[] => {
+      const record = attendanceRecords.find(
+        (r) =>
+          r.studentId === student.id &&
+          r.date === selectedDate &&
+          (r.status === "absent" ||
+            r.status === "excused" ||
+            r.status === "unknown"),
       );
-      return record
-        ? [{ student, checkInTime: record.checkInTime ?? "—" }]
-        : [];
-    });
+      if (!record) return [];
+      if (record.status === "unknown") {
+        const entry: ExcusedEntry = {
+          student,
+          kind: "unknown",
+          notes: record.notes,
+        };
+        return [entry];
+      }
+      const entry: ExcusedEntry = {
+        student,
+        kind: "excused",
+        reason: record.excuseReason ?? "other",
+        notes: record.notes,
+      };
+      return [entry];
+    },
+  );
+
+  const initialPresentStudents = students.flatMap((student) => {
+    const record = todaysRecords.find(
+      (r) => r.studentId === student.id && !r.checkOutTime,
+    );
+    return record ? [{ student, checkInTime: record.checkInTime ?? "—" }] : [];
+  });
 
   const initialCheckedOutStudents = students.flatMap((student) => {
     const record = todaysRecords.find(
-      (r) => r.studentId === student.id && r.checkOutTime
+      (r) => r.studentId === student.id && r.checkOutTime,
     );
     return record
       ? [
@@ -42,8 +99,11 @@ export default function AttendancePage() {
 
   return (
     <AttendanceBoard
-      formattedToday={formattedToday}
+      key={selectedDate}
+      selectedDate={selectedDate}
       allStudents={students}
+      scheduledTimes={scheduledTimes}
+      initialExcusedStudents={initialExcusedStudents}
       initialPresentStudents={initialPresentStudents}
       initialCheckedOutStudents={initialCheckedOutStudents}
     />

@@ -39,6 +39,7 @@ const attendanceStatusVariant: Record<
   late: "secondary",
   excused: "outline",
   absent: "destructive",
+  unknown: "secondary",
 };
 
 function formatDate(date: string) {

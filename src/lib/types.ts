@@ -2,7 +2,14 @@ export type Subject = "Math" | "Reading";
 
 export type StudentStatus = "active" | "paused" | "inactive";
 
-export type AttendanceStatus = "present" | "absent" | "late" | "excused";
+export type AttendanceStatus =
+  | "present"
+  | "absent"
+  | "late"
+  | "excused"
+  | "unknown";
+
+export type ExcuseReason = "sick" | "vacation" | "other";
 
 export type DayOfWeek = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat";
 
@@ -44,5 +51,6 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   checkInTime?: string;
   checkOutTime?: string;
+  excuseReason?: ExcuseReason;
   notes?: string;
 }
