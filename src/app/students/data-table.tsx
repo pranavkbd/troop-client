@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   useTable,
   type ColumnDef,
@@ -32,12 +33,16 @@ import { features, type DataTableFeatures } from "./data-table-features";
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<DataTableFeatures, TData>[];
   data: TData[];
+  /** Base path to navigate to on row click, e.g. "/students". Requires each row to have an `id` field. */
+  rowHrefBase?: string;
 }
 
-export function DataTable<TData extends RowData>({
+export function DataTable<TData extends RowData & { id: string }>({
   columns,
   data,
+  rowHrefBase,
 }: DataTableProps<TData>) {
+  const router = useRouter();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -115,7 +120,15 @@ export function DataTable<TData extends RowData>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className={rowHrefBase ? "cursor-pointer" : undefined}
+                  onClick={
+                    rowHrefBase
+                      ? () => router.push(`${rowHrefBase}/${row.original.id}`)
+                      : undefined
+                  }
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       <table.FlexRender cell={cell} />
