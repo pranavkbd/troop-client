@@ -9,35 +9,41 @@ import {
   students,
 } from "@/lib/mock-data";
 
-const TODAY = "2026-08-25";
-const TODAY_DATE = new Date(`${TODAY}T00:00:00`);
+const DEFAULT_DATE = "2026-08-25";
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const formattedToday = new Intl.DateTimeFormat("en-US", {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-}).format(TODAY_DATE);
+export default async function AttendancePage(props: PageProps<"/attendance">) {
+  const searchParams = await props.searchParams;
+  const rawDate = searchParams.date;
+  const selectedDate =
+    typeof rawDate === "string" && DATE_PATTERN.test(rawDate)
+      ? rawDate
+      : DEFAULT_DATE;
+  const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
 
-const todayDayOfWeek = new Intl.DateTimeFormat("en-US", {
-  weekday: "short",
-}).format(TODAY_DATE);
+  const selectedDayOfWeek = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  }).format(selectedDateObj);
 
-export default function AttendancePage() {
-  const sessionIdsToday = sessions
-    .filter((session) => session.dayOfWeek === todayDayOfWeek)
-    .map((session) => session.id);
-
-  const expectedStudentIds = Array.from(
-    new Set(
-      enrollments
-        .filter((enrollment) => sessionIdsToday.includes(enrollment.sessionId))
-        .map((enrollment) => enrollment.studentId),
-    ),
+  const sessionsToday = sessions.filter(
+    (session) => session.dayOfWeek === selectedDayOfWeek,
+  );
+  const sessionStartTimeById = new Map(
+    sessionsToday.map((session) => [session.id, session.startTime]),
   );
 
+  const scheduledTimes: Record<string, string> = {};
+  for (const enrollment of enrollments) {
+    const startTime = sessionStartTimeById.get(enrollment.sessionId);
+    if (!startTime) continue;
+    const current = scheduledTimes[enrollment.studentId];
+    if (!current || startTime < current) {
+      scheduledTimes[enrollment.studentId] = startTime;
+    }
+  }
+
   const todaysRecords = attendanceRecords.filter(
-    (record) => record.date === TODAY && record.status === "present",
+    (record) => record.date === selectedDate && record.status === "present",
   );
 
   const initialExcusedStudents: ExcusedEntry[] = students.flatMap(
@@ -45,7 +51,7 @@ export default function AttendancePage() {
       const record = attendanceRecords.find(
         (r) =>
           r.studentId === student.id &&
-          r.date === TODAY &&
+          r.date === selectedDate &&
           (r.status === "absent" ||
             r.status === "excused" ||
             r.status === "unknown"),
@@ -93,9 +99,10 @@ export default function AttendancePage() {
 
   return (
     <AttendanceBoard
-      formattedToday={formattedToday}
+      key={selectedDate}
+      selectedDate={selectedDate}
       allStudents={students}
-      expectedStudentIds={expectedStudentIds}
+      scheduledTimes={scheduledTimes}
       initialExcusedStudents={initialExcusedStudents}
       initialPresentStudents={initialPresentStudents}
       initialCheckedOutStudents={initialCheckedOutStudents}

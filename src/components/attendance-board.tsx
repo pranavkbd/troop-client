@@ -1,36 +1,33 @@
 "use client";
 
-import { PlusIcon, XIcon } from "lucide-react";
+import { addDays, format, parseISO, subDays } from "date-fns";
+import {
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  SearchIcon,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import type { ExcuseReason, Student } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function byName(a: Student, b: Student) {
   return (
@@ -72,9 +69,9 @@ type RosterRow =
   | { status: "unknown"; student: Student; notes?: string };
 
 interface AttendanceBoardProps {
-  formattedToday: string;
+  selectedDate: string;
   allStudents: Student[];
-  expectedStudentIds: string[];
+  scheduledTimes: Record<string, string>;
   initialPresentStudents: PresentEntry[];
   initialCheckedOutStudents: CheckedOutEntry[];
   initialExcusedStudents: ExcusedEntry[];
@@ -118,17 +115,65 @@ function formatTime(date: Date) {
   return `${hours}:${minutes}`;
 }
 
+interface RosterSectionProps {
+  title: string;
+  rows: RosterRow[];
+  renderRosterCard: (row: RosterRow) => React.ReactNode;
+}
+
+function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
+  const [open, setOpen] = useState(true);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex w-full items-center gap-1.5 py-1">
+        <ChevronRightIcon
+          className={cn(
+            "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+            open && "rotate-90",
+          )}
+        />
+        <span className="text-sm font-medium">
+          {title} ({rows.length})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((row) => renderRosterCard(row))}
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
+  );
+}
+
 export function AttendanceBoard({
-  formattedToday,
+  selectedDate,
   allStudents,
-  expectedStudentIds,
+  scheduledTimes,
   initialPresentStudents,
   initialCheckedOutStudents,
   initialExcusedStudents,
 }: AttendanceBoardProps) {
-  const expectedIds = useMemo(
-    () => new Set(expectedStudentIds),
-    [expectedStudentIds],
+  const router = useRouter();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const selectedDateObj = useMemo(() => parseISO(selectedDate), [selectedDate]);
+  const formattedToday = useMemo(
+    () => format(selectedDateObj, "EEEE, MMMM d, yyyy"),
+    [selectedDateObj],
+  );
+
+  const goToDate = useCallback(
+    (date: Date) => {
+      router.push(`/attendance?date=${format(date, "yyyy-MM-dd")}`);
+    },
+    [router],
+  );
+
+  const scheduledIds = useMemo(
+    () => new Set(Object.keys(scheduledTimes)),
+    [scheduledTimes],
   );
   const [present, setPresent] = useState<Map<string, PresentEntry>>(
     () =>
@@ -144,10 +189,7 @@ export function AttendanceBoard({
     () =>
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [staged, setStaged] = useState<Student[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
 
   const buildRosterRow = useCallback(
     (student: Student): RosterRow => {
@@ -185,43 +227,6 @@ export function AttendanceBoard({
     [present, checkedOut, excused],
   );
 
-  const activeStudents = useMemo(
-    () => allStudents.filter((student) => student.status === "active"),
-    [allStudents],
-  );
-  const pausedStudents = useMemo(
-    () => allStudents.filter((student) => student.status === "paused"),
-    [allStudents],
-  );
-
-  const rosterList = useMemo(
-    () =>
-      activeStudents
-        .map(buildRosterRow)
-        .sort((a, b) => byName(a.student, b.student)),
-    [activeStudents, buildRosterRow],
-  );
-
-  const pausedRosterList = useMemo(
-    () =>
-      pausedStudents
-        .map(buildRosterRow)
-        .sort((a, b) => byName(a.student, b.student)),
-    [pausedStudents, buildRosterRow],
-  );
-
-  const stagedIds = useMemo(() => new Set(staged.map((s) => s.id)), [staged]);
-
-  const searchResults = allStudents.filter(
-    (student) =>
-      !present.has(student.id) &&
-      !checkedOut.has(student.id) &&
-      !stagedIds.has(student.id) &&
-      `${student.firstName} ${student.lastName} ${student.id}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
-
   function checkInStudent(student: Student) {
     setPresent((prev) => {
       const next = new Map(prev);
@@ -252,44 +257,66 @@ export function AttendanceBoard({
     });
   }
 
-  function addToStaged(student: Student) {
-    setStaged((prev) => [...prev, student]);
-  }
+  const trimmedQuery = query.trim().toLowerCase();
 
-  function removeFromStaged(studentId: string) {
-    setStaged((prev) => prev.filter((s) => s.id !== studentId));
-  }
+  const { checkedInRows, scheduledRows, activeRows, inactiveRows } =
+    useMemo(() => {
+      const checkedIn: RosterRow[] = [];
+      const scheduled: RosterRow[] = [];
+      const active: RosterRow[] = [];
+      const inactive: RosterRow[] = [];
 
-  function handleDialogOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) {
-      setStaged([]);
-      setQuery("");
-      setSearchOpen(false);
-    }
-  }
+      for (const student of allStudents) {
+        if (
+          trimmedQuery &&
+          !`${student.firstName} ${student.lastName} ${student.id}`
+            .toLowerCase()
+            .includes(trimmedQuery)
+        ) {
+          continue;
+        }
 
-  function handleSubmit() {
-    const checkInTime = formatTime(new Date());
-    setPresent((prev) => {
-      const next = new Map(prev);
-      for (const student of staged) {
-        next.set(student.id, { student, checkInTime });
+        const row = buildRosterRow(student);
+        if (present.has(student.id)) {
+          checkedIn.push(row);
+        } else if (scheduledIds.has(student.id)) {
+          scheduled.push(row);
+        } else if (student.status === "active") {
+          active.push(row);
+        } else {
+          inactive.push(row);
+        }
       }
-      return next;
-    });
-    setExcused((prev) => {
-      const next = new Map(prev);
-      for (const student of staged) {
-        next.delete(student.id);
-      }
-      return next;
-    });
-    setStaged([]);
-    setQuery("");
-    setSearchOpen(false);
-    setOpen(false);
-  }
+
+      checkedIn.sort((a, b) => byName(a.student, b.student));
+      scheduled.sort((a, b) => {
+        const timeA = scheduledTimes[a.student.id] ?? "";
+        const timeB = scheduledTimes[b.student.id] ?? "";
+        return timeA.localeCompare(timeB) || byName(a.student, b.student);
+      });
+      active.sort((a, b) => byName(a.student, b.student));
+      inactive.sort((a, b) => byName(a.student, b.student));
+
+      return {
+        checkedInRows: checkedIn,
+        scheduledRows: scheduled,
+        activeRows: active,
+        inactiveRows: inactive,
+      };
+    }, [
+      allStudents,
+      trimmedQuery,
+      present,
+      scheduledIds,
+      buildRosterRow,
+      scheduledTimes,
+    ]);
+
+  const totalRows =
+    checkedInRows.length +
+    scheduledRows.length +
+    activeRows.length +
+    inactiveRows.length;
 
   function renderRosterCard(row: RosterRow) {
     if (row.status === "present") {
@@ -300,7 +327,7 @@ export function AttendanceBoard({
         >
           <div className="flex flex-col">
             <span className="flex items-center gap-1.5 text-sm font-medium">
-              {expectedIds.has(row.student.id) && <ExpectedDot />}
+              {scheduledIds.has(row.student.id) && <ExpectedDot />}
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
@@ -326,7 +353,7 @@ export function AttendanceBoard({
           className="flex flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
         >
           <span className="flex items-center gap-1.5 text-sm font-medium">
-            {expectedIds.has(row.student.id) && <ExpectedDot />}
+            {scheduledIds.has(row.student.id) && <ExpectedDot />}
             {row.student.firstName} {row.student.lastName}
             <EnrollmentStatusBadge status={row.student.status} />
           </span>
@@ -345,7 +372,7 @@ export function AttendanceBoard({
         >
           <div className="flex flex-col">
             <span className="flex items-center gap-1.5 text-sm font-medium">
-              {expectedIds.has(row.student.id) && <ExpectedDot />}
+              {scheduledIds.has(row.student.id) && <ExpectedDot />}
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
@@ -374,7 +401,7 @@ export function AttendanceBoard({
         >
           <div className="flex flex-col">
             <span className="flex items-center gap-1.5 text-sm font-medium">
-              {expectedIds.has(row.student.id) && <ExpectedDot />}
+              {scheduledIds.has(row.student.id) && <ExpectedDot />}
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
@@ -400,7 +427,7 @@ export function AttendanceBoard({
         className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3"
       >
         <span className="flex items-center gap-1.5 text-sm font-medium">
-          {expectedIds.has(row.student.id) && <ExpectedDot />}
+          {scheduledIds.has(row.student.id) && <ExpectedDot />}
           {row.student.firstName} {row.student.lastName}
           <EnrollmentStatusBadge status={row.student.status} />
         </span>
@@ -417,138 +444,89 @@ export function AttendanceBoard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>Attendance</CardDescription>
-        <CardTitle className="text-3xl font-semibold tracking-tight">
-          {formattedToday}
-        </CardTitle>
-        <CardAction>
-          <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-            <DialogTrigger render={<Button variant="outline" size="icon" />}>
-              <PlusIcon className="h-4 w-4" />
-              <span className="sr-only">Add students</span>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-xl">
-              <DialogHeader>
-                <DialogTitle>Add students</DialogTitle>
-                <DialogDescription>
-                  Search for students and add them to today&apos;s attendance.
-                </DialogDescription>
-              </DialogHeader>
+    <div className="flex flex-col gap-4">
+      <div className="flex w-full items-center justify-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => goToDate(subDays(selectedDateObj, 1))}
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+          <span className="sr-only">Previous day</span>
+        </Button>
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger
+            render={<Button variant="ghost" className="h-auto px-2 py-1" />}
+          >
+            <span className="text-3xl font-semibold tracking-tight">
+              {formattedToday}
+            </span>
+            <CalendarIcon className="text-muted-foreground ml-2 h-4 w-4 shrink-0" />
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={selectedDateObj}
+              onSelect={(date) => {
+                if (!date) return;
+                setCalendarOpen(false);
+                goToDate(date);
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => goToDate(addDays(selectedDateObj, 1))}
+        >
+          <ChevronRightIcon className="h-4 w-4" />
+          <span className="sr-only">Next day</span>
+        </Button>
+      </div>
 
-              <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-                <PopoverTrigger
-                  nativeButton={false}
-                  render={
-                    <Input
-                      placeholder="Search students..."
-                      value={query}
-                      onChange={(e) => {
-                        setQuery(e.target.value);
-                        setSearchOpen(true);
-                      }}
-                      onFocus={() => setSearchOpen(true)}
-                      autoFocus
-                    />
-                  }
-                />
-                <PopoverContent
-                  align="start"
-                  initialFocus={false}
-                  className="w-(--anchor-width) max-h-64 overflow-y-auto p-1"
-                >
-                  {searchResults.length === 0 ? (
-                    <p className="text-muted-foreground p-2 text-sm">
-                      {query ? "No students found." : "Start typing to search."}
-                    </p>
-                  ) : (
-                    searchResults.map((student) => (
-                      <button
-                        key={student.id}
-                        type="button"
-                        onClick={() => addToStaged(student)}
-                        className="hover:bg-muted flex w-full flex-col rounded-md px-2 py-1.5 text-left"
-                      >
-                        <span className="text-sm font-medium">
-                          {student.firstName} {student.lastName}
-                        </span>
-                        <span className="text-muted-foreground font-mono text-xs">
-                          {student.id}
-                        </span>
-                      </button>
-                    ))
-                  )}
-                </PopoverContent>
-              </Popover>
-
-              <Separator />
-
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">
-                  Added{staged.length > 0 && ` (${staged.length})`}
-                </p>
-                <div className="flex max-h-48 flex-col divide-y overflow-y-auto">
-                  {staged.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      No students added yet.
-                    </p>
-                  ) : (
-                    staged.map((student) => (
-                      <div
-                        key={student.id}
-                        className="flex items-center justify-between gap-3 py-1.5"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">
-                            {student.firstName} {student.lastName}
-                          </span>
-                          <span className="text-muted-foreground font-mono text-xs">
-                            {student.id}
-                          </span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => removeFromStaged(student.id)}
-                        >
-                          <XIcon className="h-3 w-3" />
-                          <span className="sr-only">Remove</span>
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>
-                  Cancel
-                </DialogClose>
-                <Button onClick={handleSubmit} disabled={staged.length === 0}>
-                  Submit
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {rosterList.map((row) => renderRosterCard(row))}
-        </div>
-
-        {pausedRosterList.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-muted-foreground text-sm font-medium">
-              Paused ({pausedRosterList.length})
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {pausedRosterList.map((row) => renderRosterCard(row))}
-            </div>
+      <Card>
+        <CardContent className="flex flex-col gap-6 pt-6">
+          <div className="relative">
+            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              placeholder="Search students..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {totalRows === 0 ? (
+            <p className="text-muted-foreground py-6 text-center text-sm">
+              No students found.
+            </p>
+          ) : (
+            <>
+              <RosterSection
+                title="Checked In"
+                rows={checkedInRows}
+                renderRosterCard={renderRosterCard}
+              />
+              <RosterSection
+                title="Scheduled Today"
+                rows={scheduledRows}
+                renderRosterCard={renderRosterCard}
+              />
+              <RosterSection
+                title="Active"
+                rows={activeRows}
+                renderRosterCard={renderRosterCard}
+              />
+              <RosterSection
+                title="Inactive"
+                rows={inactiveRows}
+                renderRosterCard={renderRosterCard}
+              />
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
