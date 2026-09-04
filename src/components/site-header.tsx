@@ -38,7 +38,7 @@ export function SiteHeader() {
                 href={link.href}
                 className={cn(
                   "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground"
+                  isActive ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 {link.label}

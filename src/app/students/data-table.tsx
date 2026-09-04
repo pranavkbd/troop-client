@@ -1,15 +1,15 @@
 "use client";
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
 import {
-  useTable,
   type ColumnDef,
   type ColumnFiltersState,
   type ColumnVisibilityState,
   type RowData,
   type SortingState,
+  useTable,
 } from "@tanstack/react-table";
+import { useRouter } from "next/navigation";
+import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { features, type DataTableFeatures } from "./data-table-features";
+import { type DataTableFeatures, features } from "./data-table-features";
 
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<DataTableFeatures, TData>[];
@@ -45,7 +45,7 @@ export function DataTable<TData extends RowData & { id: string }>({
   const router = useRouter();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    [],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({});

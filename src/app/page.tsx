@@ -8,7 +8,7 @@ export default function Home() {
   const activeStudents = students.filter((s) => s.status === "active");
   const todayRecords = attendanceRecords.filter((a) => a.date === today);
   const presentCount = todayRecords.filter(
-    (a) => a.status === "present" || a.status === "late"
+    (a) => a.status === "present" || a.status === "late",
   ).length;
   const attendanceRate = todayRecords.length
     ? Math.round((presentCount / todayRecords.length) * 100)
@@ -57,8 +57,8 @@ export default function Home() {
             >
               <div>
                 <p className="text-sm font-medium">
-                  {session.subject} — {session.dayOfWeek}{" "}
-                  {session.startTime}–{session.endTime}
+                  {session.subject} — {session.dayOfWeek} {session.startTime}–
+                  {session.endTime}
                 </p>
                 <p className="text-muted-foreground text-sm">
                   {session.instructor} · {session.room}

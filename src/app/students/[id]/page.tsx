@@ -1,6 +1,6 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +51,7 @@ function formatDate(date: string) {
 }
 
 export default async function StudentDetailPage(
-  props: PageProps<"/students/[id]">
+  props: PageProps<"/students/[id]">,
 ) {
   const { id } = await props.params;
   const student = students.find((s) => s.id === id);
@@ -96,7 +96,8 @@ export default async function StudentDetailPage(
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Student ID {student.id} · Enrolled {formatDate(student.enrolledAt)}
+                Student ID {student.id} · Enrolled{" "}
+                {formatDate(student.enrolledAt)}
               </p>
             </div>
           </div>
@@ -177,9 +178,7 @@ export default async function StudentDetailPage(
                       <TableCell>{record.checkInTime ?? "—"}</TableCell>
                       <TableCell>{record.checkOutTime ?? "—"}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant={attendanceStatusVariant[record.status]}
-                        >
+                        <Badge variant={attendanceStatusVariant[record.status]}>
                           {record.status}
                         </Badge>
                       </TableCell>

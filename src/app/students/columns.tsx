@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { createColumnHelper } from "@tanstack/react-table";
 import { ArrowUpDown, MoreHorizontal } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,8 @@ export const columns = columnHelper.columns([
       const student = row.original;
 
       return (
+        // biome-ignore lint/a11y/noStaticElementInteractions: only stops the click from bubbling to the row's own click handler
+        // biome-ignore lint/a11y/useKeyWithClickEvents: not a standalone interactive control, just a bubbling guard
         <div onClick={(event) => event.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -120,7 +122,9 @@ export const columns = columnHelper.columns([
                   Copy student ID
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem render={<Link href={`/students/${student.id}`} />}>
+                <DropdownMenuItem
+                  render={<Link href={`/students/${student.id}`} />}
+                >
                   View profile
                 </DropdownMenuItem>
                 <DropdownMenuItem>Edit student</DropdownMenuItem>
