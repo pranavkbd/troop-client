@@ -5,13 +5,12 @@ import {
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  PlusIcon,
   SearchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { RosterCard } from "@/components/roster-card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,11 +46,16 @@ interface CheckedOutEntry {
   checkOutTime: string;
 }
 
+interface PickedUpEntry {
+  student: Student;
+  pickUpTime: string;
+}
+
 export type ExcusedEntry =
   | { student: Student; kind: "excused"; reason: ExcuseReason; notes?: string }
   | { student: Student; kind: "unknown"; notes?: string };
 
-type RosterRow =
+export type RosterRow =
   | { status: "not-checked-in"; student: Student }
   | { status: "present"; student: Student; checkInTime: string }
   | {
@@ -61,12 +65,23 @@ type RosterRow =
       checkOutTime: string;
     }
   | {
+      status: "picked-up";
+      student: Student;
+      pickUpTime: string;
+    }
+  | {
       status: "excused";
       student: Student;
       reason: ExcuseReason;
       notes?: string;
     }
   | { status: "unknown"; student: Student; notes?: string };
+
+export const excuseReasonLabels: Record<ExcuseReason, string> = {
+  sick: "Sick",
+  vacation: "Vacation",
+  other: "Excused",
+};
 
 interface AttendanceBoardProps {
   selectedDate: string;
@@ -75,38 +90,6 @@ interface AttendanceBoardProps {
   initialPresentStudents: PresentEntry[];
   initialCheckedOutStudents: CheckedOutEntry[];
   initialExcusedStudents: ExcusedEntry[];
-}
-
-function ExpectedDot() {
-  return (
-    <span
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500"
-      title="Expected today"
-    >
-      <span className="sr-only">Expected today</span>
-    </span>
-  );
-}
-
-const excuseReasonLabels: Record<ExcuseReason, string> = {
-  sick: "Sick",
-  vacation: "Vacation",
-  other: "Excused",
-};
-
-const enrollmentStatusLabels: Partial<Record<Student["status"], string>> = {
-  paused: "Paused",
-  inactive: "Inactive",
-};
-
-function EnrollmentStatusBadge({ status }: { status: Student["status"] }) {
-  const label = enrollmentStatusLabels[status];
-  if (!label) return null;
-  return (
-    <Badge variant="outline" className="h-4 px-1 text-[10px]">
-      {label}
-    </Badge>
-  );
 }
 
 function formatTime(date: Date) {
@@ -189,10 +172,21 @@ export function AttendanceBoard({
     () =>
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
+  const [pickedUp, setPickedUp] = useState<Map<string, PickedUpEntry>>(
+    () => new Map(),
+  );
   const [query, setQuery] = useState("");
 
   const buildRosterRow = useCallback(
     (student: Student): RosterRow => {
+      const pickedUpEntry = pickedUp.get(student.id);
+      if (pickedUpEntry) {
+        return {
+          status: "picked-up",
+          student,
+          pickUpTime: pickedUpEntry.pickUpTime,
+        };
+      }
       const checkedOutEntry = checkedOut.get(student.id);
       if (checkedOutEntry) {
         return {
@@ -224,7 +218,7 @@ export function AttendanceBoard({
       }
       return { status: "not-checked-in", student };
     },
-    [present, checkedOut, excused],
+    [present, checkedOut, pickedUp, excused],
   );
 
   function checkInStudent(student: Student) {
@@ -253,6 +247,26 @@ export function AttendanceBoard({
     setCheckedOut((prev) => {
       const next = new Map(prev);
       next.set(studentId, { ...entry, checkOutTime: formatTime(new Date()) });
+      return next;
+    });
+  }
+
+  function pickUpStudent(student: Student) {
+    setExcused((prev) => {
+      if (!prev.has(student.id)) return prev;
+      const next = new Map(prev);
+      next.delete(student.id);
+      return next;
+    });
+    setCheckedOut((prev) => {
+      if (!prev.has(student.id)) return prev;
+      const next = new Map(prev);
+      next.delete(student.id);
+      return next;
+    });
+    setPickedUp((prev) => {
+      const next = new Map(prev);
+      next.set(student.id, { student, pickUpTime: formatTime(new Date()) });
       return next;
     });
   }
@@ -319,127 +333,14 @@ export function AttendanceBoard({
     inactiveRows.length;
 
   function renderRosterCard(row: RosterRow) {
-    if (row.status === "present") {
-      return (
-        <div
-          key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 dark:border-green-500 dark:bg-green-950/40"
-        >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              Checked in {row.checkInTime}
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => checkOutStudent(row.student.id)}
-          >
-            Check out
-          </Button>
-        </div>
-      );
-    }
-
-    if (row.status === "checked-out") {
-      return (
-        <div
-          key={row.student.id}
-          className="flex flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
-        >
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            {scheduledIds.has(row.student.id) && <ExpectedDot />}
-            {row.student.firstName} {row.student.lastName}
-            <EnrollmentStatusBadge status={row.student.status} />
-          </span>
-          <span className="text-xs">
-            {row.checkInTime} &ndash; {row.checkOutTime}
-          </span>
-        </div>
-      );
-    }
-
-    if (row.status === "excused") {
-      return (
-        <div
-          key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 dark:border-amber-400 dark:bg-amber-950/40"
-        >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              {excuseReasonLabels[row.reason]}
-              {row.notes ? ` — ${row.notes}` : ""}
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
-        </div>
-      );
-    }
-
-    if (row.status === "unknown") {
-      return (
-        <div
-          key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 dark:border-rose-400 dark:bg-rose-950/40"
-        >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              No show{row.notes ? ` — ${row.notes}` : ""}
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
-        </div>
-      );
-    }
-
     return (
-      <div
+      <RosterCard
         key={row.student.id}
-        className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3"
-      >
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {scheduledIds.has(row.student.id) && <ExpectedDot />}
-          {row.student.firstName} {row.student.lastName}
-          <EnrollmentStatusBadge status={row.student.status} />
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => checkInStudent(row.student)}
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          <span className="sr-only">Check in</span>
-        </Button>
-      </div>
+        row={row}
+        onCheckIn={checkInStudent}
+        onCheckOut={checkOutStudent}
+        onPickUp={pickUpStudent}
+      />
     );
   }
 
