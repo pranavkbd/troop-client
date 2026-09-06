@@ -3,9 +3,9 @@ import { faker } from "@faker-js/faker";
 import type {
   AttendanceRecord,
   AttendanceStatus,
+  DayOfWeek,
   Enrollment,
   ExcuseReason,
-  Session,
   Student,
   Subject,
 } from "@/lib/types";
@@ -253,60 +253,140 @@ export const students: Student[] = [
   ...generateStudents(180, 21),
 ];
 
-export const sessions: Session[] = [
+// Manually-curated schedule slots for the narrative students, inlined from
+// what used to be the shared `sess1`..`sess4` catalog so the seeded story
+// (Ava/Sofia/Mia Tue 16:00, Ethan/Zoe Thu 16:00, Zoe/Oliver Sat 10:00) is
+// unchanged visually now that each enrollment carries its own time.
+const manualEnrollments: Enrollment[] = [
   {
-    id: "sess1",
+    id: "e1",
+    studentId: "100001",
+    subject: "Math",
     dayOfWeek: "Tue",
     startTime: "16:00",
     endTime: "17:30",
-    subject: "Math",
     instructor: "Ms. Carter",
     room: "Room A",
   },
   {
-    id: "sess2",
+    id: "e2",
+    studentId: "100001",
+    subject: "Reading",
     dayOfWeek: "Tue",
     startTime: "16:00",
     endTime: "17:30",
-    subject: "Reading",
     instructor: "Mr. Alvarez",
     room: "Room B",
   },
   {
-    id: "sess3",
+    id: "e3",
+    studentId: "100002",
+    subject: "Math",
     dayOfWeek: "Thu",
     startTime: "16:00",
     endTime: "17:30",
-    subject: "Math",
     instructor: "Ms. Carter",
     room: "Room A",
   },
   {
-    id: "sess4",
+    id: "e4",
+    studentId: "100003",
+    subject: "Math",
+    dayOfWeek: "Tue",
+    startTime: "16:00",
+    endTime: "17:30",
+    instructor: "Ms. Carter",
+    room: "Room A",
+  },
+  {
+    id: "e5",
+    studentId: "100003",
+    subject: "Reading",
+    dayOfWeek: "Tue",
+    startTime: "16:00",
+    endTime: "17:30",
+    instructor: "Mr. Alvarez",
+    room: "Room B",
+  },
+  {
+    id: "e6",
+    studentId: "100005",
+    subject: "Math",
+    dayOfWeek: "Tue",
+    startTime: "16:00",
+    endTime: "17:30",
+    instructor: "Ms. Carter",
+    room: "Room A",
+  },
+  {
+    id: "e7",
+    studentId: "100005",
+    subject: "Reading",
+    dayOfWeek: "Tue",
+    startTime: "16:00",
+    endTime: "17:30",
+    instructor: "Mr. Alvarez",
+    room: "Room B",
+  },
+  {
+    id: "e8",
+    studentId: "100007",
+    subject: "Math",
+    dayOfWeek: "Thu",
+    startTime: "16:00",
+    endTime: "17:30",
+    instructor: "Ms. Carter",
+    room: "Room A",
+  },
+  {
+    id: "e9",
+    studentId: "100007",
+    subject: "Reading",
     dayOfWeek: "Sat",
     startTime: "10:00",
     endTime: "11:30",
+    instructor: "Mr. Alvarez",
+    room: "Room B",
+  },
+  {
+    id: "e10",
+    studentId: "100008",
     subject: "Reading",
+    dayOfWeek: "Sat",
+    startTime: "10:00",
+    endTime: "11:30",
     instructor: "Mr. Alvarez",
     room: "Room B",
   },
 ];
 
-const manualEnrollments: Enrollment[] = [
-  { id: "e1", studentId: "100001", sessionId: "sess1", subject: "Math" },
-  { id: "e2", studentId: "100001", sessionId: "sess2", subject: "Reading" },
-  { id: "e3", studentId: "100002", sessionId: "sess3", subject: "Math" },
-  { id: "e4", studentId: "100003", sessionId: "sess1", subject: "Math" },
-  { id: "e5", studentId: "100003", sessionId: "sess2", subject: "Reading" },
-  { id: "e6", studentId: "100005", sessionId: "sess1", subject: "Math" },
-  { id: "e7", studentId: "100005", sessionId: "sess2", subject: "Reading" },
-  { id: "e8", studentId: "100007", sessionId: "sess3", subject: "Math" },
-  { id: "e9", studentId: "100007", sessionId: "sess4", subject: "Reading" },
-  { id: "e10", studentId: "100008", sessionId: "sess4", subject: "Reading" },
+const TIME_SLOTS: {
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+}[] = [
+  { dayOfWeek: "Mon", startTime: "15:00", endTime: "16:30" },
+  { dayOfWeek: "Tue", startTime: "16:00", endTime: "17:30" },
+  { dayOfWeek: "Wed", startTime: "15:30", endTime: "17:00" },
+  { dayOfWeek: "Thu", startTime: "16:00", endTime: "17:30" },
+  { dayOfWeek: "Thu", startTime: "17:30", endTime: "19:00" },
+  { dayOfWeek: "Fri", startTime: "15:00", endTime: "16:30" },
+  { dayOfWeek: "Sat", startTime: "10:00", endTime: "11:30" },
 ];
 
-const mathSessionIds = ["sess1", "sess3"];
-const readingSessionIds = ["sess2", "sess4"];
+const INSTRUCTORS_BY_SUBJECT: Record<Subject, string[]> = {
+  Math: ["Ms. Carter", "Mr. Nakamura"],
+  Reading: ["Mr. Alvarez", "Ms. Delgado"],
+};
+
+const ROOMS = ["Room A", "Room B", "Room C"];
+
+function timeRangesOverlap(
+  a: { startTime: string; endTime: string },
+  b: { startTime: string; endTime: string },
+): boolean {
+  return a.startTime < b.endTime && b.startTime < a.endTime;
+}
 
 function generateEnrollments(
   studentsNeedingEnrollment: Student[],
@@ -315,15 +395,33 @@ function generateEnrollments(
 
   const result: Enrollment[] = [];
   for (const student of studentsNeedingEnrollment) {
+    const studentSlots: (typeof TIME_SLOTS)[number][] = [];
     for (const subject of Object.keys(student.levels) as Subject[]) {
-      const sessionId = faker.helpers.arrayElement(
-        subject === "Math" ? mathSessionIds : readingSessionIds,
-      );
+      let slot = faker.helpers.arrayElement(TIME_SLOTS);
+      const maxAttempts = 5;
+      for (
+        let attempt = 0;
+        attempt < maxAttempts &&
+        studentSlots.some(
+          (existing) =>
+            existing.dayOfWeek === slot.dayOfWeek &&
+            timeRangesOverlap(existing, slot),
+        );
+        attempt++
+      ) {
+        slot = faker.helpers.arrayElement(TIME_SLOTS);
+      }
+      studentSlots.push(slot);
+
       result.push({
         id: `e-gen-${student.id}-${subject}`,
         studentId: student.id,
-        sessionId,
         subject,
+        dayOfWeek: slot.dayOfWeek,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        instructor: faker.helpers.arrayElement(INSTRUCTORS_BY_SUBJECT[subject]),
+        room: faker.helpers.arrayElement(ROOMS),
       });
     }
   }
@@ -355,13 +453,9 @@ const excuseNotesByReason: Record<ExcuseReason, string> = {
 function generateExcusedRecords(): AttendanceRecord[] {
   faker.seed(91011);
 
-  const todaySessionIds = sessions
-    .filter((session) => session.dayOfWeek === "Tue")
-    .map((session) => session.id);
   const candidates = enrollments.filter(
     (enrollment) =>
-      todaySessionIds.includes(enrollment.sessionId) &&
-      Number(enrollment.studentId) >= 100021,
+      enrollment.dayOfWeek === "Tue" && Number(enrollment.studentId) >= 100021,
   );
   const picks = faker.helpers.arrayElements(candidates, 14);
   const [excusedPicks, unknownPicks] = [picks.slice(0, 10), picks.slice(10)];
@@ -376,7 +470,7 @@ function generateExcusedRecords(): AttendanceRecord[] {
       return {
         id: `a-excused-${index}`,
         studentId: enrollment.studentId,
-        sessionId: enrollment.sessionId,
+        enrollmentId: enrollment.id,
         date: "2026-08-25",
         status,
         excuseReason,
@@ -389,7 +483,7 @@ function generateExcusedRecords(): AttendanceRecord[] {
     (enrollment, index) => ({
       id: `a-unknown-${index}`,
       studentId: enrollment.studentId,
-      sessionId: enrollment.sessionId,
+      enrollmentId: enrollment.id,
       date: "2026-08-25",
       status: "unknown",
       notes: "No show, no reason given",
@@ -403,7 +497,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a1",
     studentId: "100001",
-    sessionId: "sess1",
+    enrollmentId: "e1",
     date: "2026-08-25",
     status: "present",
     checkInTime: "16:02",
@@ -412,7 +506,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a2",
     studentId: "100003",
-    sessionId: "sess1",
+    enrollmentId: "e4",
     date: "2026-08-25",
     status: "late",
     checkInTime: "16:15",
@@ -421,7 +515,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a3",
     studentId: "100005",
-    sessionId: "sess1",
+    enrollmentId: "e6",
     date: "2026-08-25",
     status: "present",
     checkInTime: "15:58",
@@ -430,7 +524,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a4",
     studentId: "100001",
-    sessionId: "sess2",
+    enrollmentId: "e2",
     date: "2026-08-25",
     status: "absent",
     notes: "Sick",
@@ -438,7 +532,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a5",
     studentId: "100003",
-    sessionId: "sess2",
+    enrollmentId: "e5",
     date: "2026-08-25",
     status: "present",
     checkInTime: "16:05",
@@ -447,7 +541,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a6",
     studentId: "100005",
-    sessionId: "sess2",
+    enrollmentId: "e7",
     date: "2026-08-25",
     status: "excused",
     excuseReason: "vacation",
@@ -458,7 +552,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a7",
     studentId: "100001",
-    sessionId: "sess1",
+    enrollmentId: "e1",
     date: "2026-08-18",
     status: "present",
     checkInTime: "16:00",
@@ -467,7 +561,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a8",
     studentId: "100001",
-    sessionId: "sess2",
+    enrollmentId: "e2",
     date: "2026-08-18",
     status: "present",
     checkInTime: "16:03",
@@ -476,7 +570,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a9",
     studentId: "100003",
-    sessionId: "sess1",
+    enrollmentId: "e4",
     date: "2026-08-18",
     status: "present",
     checkInTime: "16:01",
@@ -485,7 +579,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a10",
     studentId: "100003",
-    sessionId: "sess2",
+    enrollmentId: "e5",
     date: "2026-08-18",
     status: "present",
     checkInTime: "16:06",
@@ -494,7 +588,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a11",
     studentId: "100005",
-    sessionId: "sess1",
+    enrollmentId: "e6",
     date: "2026-08-18",
     status: "present",
     checkInTime: "15:57",
@@ -503,7 +597,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a12",
     studentId: "100005",
-    sessionId: "sess2",
+    enrollmentId: "e7",
     date: "2026-08-18",
     status: "present",
     checkInTime: "16:00",
@@ -512,7 +606,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a13",
     studentId: "100007",
-    sessionId: "sess4",
+    enrollmentId: "e9",
     date: "2026-08-22",
     status: "present",
     checkInTime: "10:01",
@@ -521,7 +615,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a14",
     studentId: "100008",
-    sessionId: "sess4",
+    enrollmentId: "e10",
     date: "2026-08-22",
     status: "present",
     checkInTime: "10:00",
@@ -530,7 +624,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a15",
     studentId: "100002",
-    sessionId: "sess3",
+    enrollmentId: "e3",
     date: "2026-08-20",
     status: "present",
     checkInTime: "16:00",
@@ -539,7 +633,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a16",
     studentId: "100007",
-    sessionId: "sess3",
+    enrollmentId: "e8",
     date: "2026-08-20",
     status: "present",
     checkInTime: "16:02",
@@ -550,7 +644,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a17",
     studentId: "100001",
-    sessionId: "sess1",
+    enrollmentId: "e1",
     date: "2026-08-11",
     status: "late",
     checkInTime: "16:12",
@@ -559,7 +653,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a18",
     studentId: "100001",
-    sessionId: "sess2",
+    enrollmentId: "e2",
     date: "2026-08-11",
     status: "present",
     checkInTime: "16:01",
@@ -568,7 +662,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a19",
     studentId: "100003",
-    sessionId: "sess1",
+    enrollmentId: "e4",
     date: "2026-08-11",
     status: "present",
     checkInTime: "15:58",
@@ -577,7 +671,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a20",
     studentId: "100003",
-    sessionId: "sess2",
+    enrollmentId: "e5",
     date: "2026-08-11",
     status: "excused",
     notes: "Doctor appointment",
@@ -585,7 +679,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a21",
     studentId: "100005",
-    sessionId: "sess1",
+    enrollmentId: "e6",
     date: "2026-08-11",
     status: "present",
     checkInTime: "16:03",
@@ -594,7 +688,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a22",
     studentId: "100005",
-    sessionId: "sess2",
+    enrollmentId: "e7",
     date: "2026-08-11",
     status: "present",
     checkInTime: "16:01",
@@ -603,7 +697,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a23",
     studentId: "100002",
-    sessionId: "sess3",
+    enrollmentId: "e3",
     date: "2026-08-13",
     status: "late",
     checkInTime: "16:18",
@@ -612,7 +706,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a24",
     studentId: "100007",
-    sessionId: "sess3",
+    enrollmentId: "e8",
     date: "2026-08-13",
     status: "late",
     checkInTime: "16:18",
@@ -621,7 +715,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a25",
     studentId: "100007",
-    sessionId: "sess4",
+    enrollmentId: "e9",
     date: "2026-08-15",
     status: "present",
     checkInTime: "09:59",
@@ -630,7 +724,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a26",
     studentId: "100008",
-    sessionId: "sess4",
+    enrollmentId: "e10",
     date: "2026-08-15",
     status: "present",
     checkInTime: "10:02",
@@ -641,7 +735,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a27",
     studentId: "100001",
-    sessionId: "sess1",
+    enrollmentId: "e1",
     date: "2026-08-04",
     status: "present",
     checkInTime: "15:59",
@@ -650,7 +744,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a28",
     studentId: "100001",
-    sessionId: "sess2",
+    enrollmentId: "e2",
     date: "2026-08-04",
     status: "absent",
     notes: "Family event",
@@ -658,7 +752,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a29",
     studentId: "100003",
-    sessionId: "sess1",
+    enrollmentId: "e4",
     date: "2026-08-04",
     status: "present",
     checkInTime: "16:00",
@@ -667,7 +761,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a30",
     studentId: "100003",
-    sessionId: "sess2",
+    enrollmentId: "e5",
     date: "2026-08-04",
     status: "present",
     checkInTime: "16:02",
@@ -676,7 +770,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a31",
     studentId: "100005",
-    sessionId: "sess1",
+    enrollmentId: "e6",
     date: "2026-08-04",
     status: "absent",
     notes: "Vacation",
@@ -684,7 +778,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a32",
     studentId: "100005",
-    sessionId: "sess2",
+    enrollmentId: "e7",
     date: "2026-08-04",
     status: "absent",
     notes: "Vacation",
@@ -692,7 +786,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a33",
     studentId: "100002",
-    sessionId: "sess3",
+    enrollmentId: "e3",
     date: "2026-08-06",
     status: "present",
     checkInTime: "16:00",
@@ -701,7 +795,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a34",
     studentId: "100007",
-    sessionId: "sess3",
+    enrollmentId: "e8",
     date: "2026-08-06",
     status: "present",
     checkInTime: "16:00",
@@ -710,7 +804,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a35",
     studentId: "100007",
-    sessionId: "sess4",
+    enrollmentId: "e9",
     date: "2026-08-08",
     status: "excused",
     notes: "Family trip",
@@ -718,7 +812,7 @@ export const attendanceRecords: AttendanceRecord[] = [
   {
     id: "a36",
     studentId: "100008",
-    sessionId: "sess4",
+    enrollmentId: "e10",
     date: "2026-08-08",
     status: "present",
     checkInTime: "09:58",

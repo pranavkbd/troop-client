@@ -19,8 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { attendanceRecords, sessions, students } from "@/lib/mock-data";
-import type { AttendanceStatus, StudentStatus } from "@/lib/types";
+import { attendanceRecords, enrollments, students } from "@/lib/mock-data";
+import {
+  type AttendanceStatus,
+  compareByDayThenTime,
+  type StudentStatus,
+} from "@/lib/types";
 
 const statusVariant: Record<
   StudentStatus,
@@ -64,9 +68,13 @@ export default async function StudentDetailPage(
     .filter((record) => record.studentId === student.id)
     .map((record) => ({
       record,
-      session: sessions.find((s) => s.id === record.sessionId),
+      enrollment: enrollments.find((e) => e.id === record.enrollmentId),
     }))
     .sort((a, b) => b.record.date.localeCompare(a.record.date));
+
+  const schedule = enrollments
+    .filter((enrollment) => enrollment.studentId === student.id)
+    .sort(compareByDayThenTime);
 
   const initials = `${student.firstName[0]}${student.lastName[0]}`;
 
@@ -147,6 +155,55 @@ export default async function StudentDetailPage(
 
       <Card>
         <CardHeader>
+          <CardTitle>Schedule</CardTitle>
+          <CardDescription>
+            {schedule.length} scheduled session
+            {schedule.length === 1 ? "" : "s"}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-hidden rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Instructor</TableHead>
+                  <TableHead>Room</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {schedule.length ? (
+                  schedule.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell>{enrollment.subject}</TableCell>
+                      <TableCell>{enrollment.dayOfWeek}</TableCell>
+                      <TableCell>
+                        {enrollment.startTime}–{enrollment.endTime}
+                      </TableCell>
+                      <TableCell>{enrollment.instructor}</TableCell>
+                      <TableCell>{enrollment.room ?? "—"}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={5}
+                      className="h-24 text-center text-muted-foreground"
+                    >
+                      No scheduled sessions.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Attendance history</CardTitle>
           <CardDescription>
             {history.length} check-in{history.length === 1 ? "" : "s"} recorded.
@@ -167,12 +224,12 @@ export default async function StudentDetailPage(
               </TableHeader>
               <TableBody>
                 {history.length ? (
-                  history.map(({ record, session }) => (
+                  history.map(({ record, enrollment }) => (
                     <TableRow key={record.id}>
                       <TableCell>{formatDate(record.date)}</TableCell>
                       <TableCell>
-                        {session
-                          ? `${session.subject} · ${session.dayOfWeek} ${session.startTime}`
+                        {enrollment
+                          ? `${enrollment.subject} · ${enrollment.dayOfWeek} ${enrollment.startTime}`
                           : "—"}
                       </TableCell>
                       <TableCell>{record.checkInTime ?? "—"}</TableCell>

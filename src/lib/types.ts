@@ -26,31 +26,44 @@ export interface Student {
   enrolledAt: string;
 }
 
-export interface Session {
-  id: string;
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-  subject: Subject;
-  instructor: string;
-  room?: string;
-}
-
 export interface Enrollment {
   id: string;
   studentId: string;
-  sessionId: string;
   subject: Subject;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  instructor: string;
+  room?: string;
 }
 
 export interface AttendanceRecord {
   id: string;
   studentId: string;
-  sessionId: string;
+  enrollmentId: string;
   date: string;
   status: AttendanceStatus;
   checkInTime?: string;
   checkOutTime?: string;
   excuseReason?: ExcuseReason;
   notes?: string;
+}
+
+export const DAY_ORDER: DayOfWeek[] = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+];
+
+export function compareByDayThenTime(
+  a: { dayOfWeek: DayOfWeek; startTime: string },
+  b: { dayOfWeek: DayOfWeek; startTime: string },
+): number {
+  const dayDiff =
+    DAY_ORDER.indexOf(a.dayOfWeek) - DAY_ORDER.indexOf(b.dayOfWeek);
+  if (dayDiff !== 0) return dayDiff;
+  return a.startTime.localeCompare(b.startTime);
 }

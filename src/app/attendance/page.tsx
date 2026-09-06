@@ -2,12 +2,7 @@ import {
   AttendanceBoard,
   type ExcusedEntry,
 } from "@/components/attendance-board";
-import {
-  attendanceRecords,
-  enrollments,
-  sessions,
-  students,
-} from "@/lib/mock-data";
+import { attendanceRecords, enrollments, students } from "@/lib/mock-data";
 
 const DEFAULT_DATE = "2026-08-25";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,20 +20,12 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
     weekday: "short",
   }).format(selectedDateObj);
 
-  const sessionsToday = sessions.filter(
-    (session) => session.dayOfWeek === selectedDayOfWeek,
-  );
-  const sessionStartTimeById = new Map(
-    sessionsToday.map((session) => [session.id, session.startTime]),
-  );
-
   const scheduledTimes: Record<string, string> = {};
   for (const enrollment of enrollments) {
-    const startTime = sessionStartTimeById.get(enrollment.sessionId);
-    if (!startTime) continue;
+    if (enrollment.dayOfWeek !== selectedDayOfWeek) continue;
     const current = scheduledTimes[enrollment.studentId];
-    if (!current || startTime < current) {
-      scheduledTimes[enrollment.studentId] = startTime;
+    if (!current || enrollment.startTime < current) {
+      scheduledTimes[enrollment.studentId] = enrollment.startTime;
     }
   }
 
