@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/students", label: "Students" },
-  { href: "/attendance", label: "Attendance" },
+  { href: "/attendance", label: "Attendance Click Popup" },
 ];
 
 export function SiteHeader() {
