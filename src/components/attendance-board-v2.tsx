@@ -134,7 +134,7 @@ function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
           {title} ({rows.length})
         </span>
       </CollapsibleTrigger>
-      <CollapsiblePanel>
+      <CollapsiblePanel className="overflow-visible">
         <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((row) => renderRosterCard(row))}
         </div>
@@ -143,7 +143,7 @@ function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
   );
 }
 
-export function AttendanceBoard({
+export function AttendanceBoardV2({
   selectedDate,
   allStudents,
   scheduledTimes,
@@ -161,7 +161,7 @@ export function AttendanceBoard({
 
   const goToDate = useCallback(
     (date: Date) => {
-      router.push(`/attendance?date=${format(date, "yyyy-MM-dd")}`);
+      router.push(`/attendance-v2?date=${format(date, "yyyy-MM-dd")}`);
     },
     [router],
   );
@@ -382,7 +382,7 @@ export function AttendanceBoard({
     if (expandedStudentId !== row.student.id) return null;
 
     return (
-      <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
+      <div className="absolute top-full right-0 left-0 z-20 mt-1 flex flex-wrap items-center gap-2 rounded-lg border bg-popover p-2 shadow-md">
         {row.status === "present" ? (
           <Button
             variant="outline"
@@ -450,25 +450,13 @@ export function AttendanceBoard({
         <div
           key={row.student.id}
           {...cardProps(row)}
-          className="flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 outline-none dark:border-green-500 dark:bg-green-950/40"
+          className="relative flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 outline-none dark:border-green-500 dark:bg-green-950/40"
         >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex flex-col">
-              {renderName(row)}
-              <span className="text-muted-foreground text-xs">
-                Checked in {row.checkInTime}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                checkOutStudent(row.student.id);
-              }}
-            >
-              Check out
-            </Button>
+          <div className="flex flex-col">
+            {renderName(row)}
+            <span className="text-muted-foreground text-xs">
+              Checked in {row.checkInTime}
+            </span>
           </div>
           {renderExpandedActions(row)}
         </div>
@@ -480,7 +468,7 @@ export function AttendanceBoard({
         <div
           key={row.student.id}
           {...cardProps(row)}
-          className="flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground outline-none"
+          className="relative flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground outline-none"
         >
           {renderName(row)}
           <span className="text-xs">
@@ -496,7 +484,7 @@ export function AttendanceBoard({
         <div
           key={row.student.id}
           {...cardProps(row)}
-          className="flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground outline-none"
+          className="relative flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground outline-none"
         >
           {renderName(row)}
           <span className="text-xs">Picked up {row.pickupTime}</span>
@@ -510,7 +498,7 @@ export function AttendanceBoard({
         <div
           key={row.student.id}
           {...cardProps(row)}
-          className="flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 outline-none dark:border-amber-400 dark:bg-amber-950/40"
+          className="relative flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 outline-none dark:border-amber-400 dark:bg-amber-950/40"
         >
           {renderName(row)}
           <span className="text-muted-foreground text-xs">
@@ -527,7 +515,7 @@ export function AttendanceBoard({
         <div
           key={row.student.id}
           {...cardProps(row)}
-          className="flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 outline-none dark:border-rose-400 dark:bg-rose-950/40"
+          className="relative flex cursor-pointer flex-col gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 outline-none dark:border-rose-400 dark:bg-rose-950/40"
         >
           {renderName(row)}
           <span className="text-muted-foreground text-xs">
@@ -542,7 +530,7 @@ export function AttendanceBoard({
       <div
         key={row.student.id}
         {...cardProps(row)}
-        className="flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-3 outline-none"
+        className="relative flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-3 outline-none"
       >
         {renderName(row)}
         {renderExpandedActions(row)}
