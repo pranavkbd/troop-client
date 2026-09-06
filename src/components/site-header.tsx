@@ -9,7 +9,12 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/students", label: "Students" },
-  { href: "/attendance", label: "Attendance" },
+  { href: "/attendance", label: "Attendance-Hold" },
+  { href: "/attendance-experiment", label: "Attendance (Bar)" },
+  { href: "/attendance-experiment-2", label: "Attendance (Ring)" },
+  { href: "/attendance-experiment-3", label: "Attendance (Pulse)" },
+  { href: "/attendance-experiment-4", label: "Attendance (Icon)" },
+  { href: "/attendance-experiment-5", label: "Attendance (Press)" },
 ];
 
 export function SiteHeader() {
@@ -30,7 +35,8 @@ export function SiteHeader() {
             const isActive =
               link.href === "/"
                 ? pathname === "/"
-                : pathname.startsWith(link.href);
+                : pathname === link.href ||
+                  pathname.startsWith(`${link.href}/`);
 
             return (
               <Link

@@ -75,27 +75,62 @@ type RosterRow =
     }
   | { status: "unknown"; student: Student; notes?: string };
 
-// Kept in sync with each HoldProgressOverlay's `duration-[1500ms]` class below.
+// Kept in sync with each HoldProgressRing's `duration-[1500ms]` class below.
 const HOLD_THRESHOLD_MS = 1500;
 
-function HoldProgressOverlay({
+const RING_SIZE = 18;
+const RING_STROKE = 2.5;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function HoldProgressRing({
   isPressing,
   colorClassName,
+  className,
 }: {
   isPressing: boolean;
   colorClassName: string;
+  className?: string;
 }) {
   return (
-    <span
+    <svg
       aria-hidden
+      width={RING_SIZE}
+      height={RING_SIZE}
+      viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
       className={cn(
-        "pointer-events-none absolute inset-0 origin-left",
-        colorClassName,
-        isPressing
-          ? "scale-x-100 transition-transform duration-[1500ms] ease-linear"
-          : "scale-x-0 transition-none",
+        "pointer-events-none shrink-0 transition-opacity duration-150",
+        isPressing ? "opacity-100" : "opacity-0",
+        className,
       )}
-    />
+    >
+      <title>Hold progress</title>
+      <circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth={RING_STROKE}
+        className="stroke-border"
+      />
+      <circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth={RING_STROKE}
+        strokeLinecap="round"
+        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={isPressing ? 0 : RING_CIRCUMFERENCE}
+        transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+        className={cn(
+          colorClassName,
+          isPressing
+            ? "transition-[stroke-dashoffset] duration-[1500ms] ease-linear"
+            : "transition-none",
+        )}
+      />
+    </svg>
   );
 }
 
@@ -106,19 +141,30 @@ type PointerHandlers = {
   onPointerCancel: (e: React.PointerEvent) => void;
 };
 
-function PickUpTrigger({ handlers }: { handlers: PointerHandlers }) {
+function PickUpTrigger({
+  handlers,
+  isPressing,
+}: {
+  handlers: PointerHandlers;
+  isPressing: boolean;
+}) {
   return (
     <Button
       variant="ghost"
       size="icon-xs"
-      className="relative z-10"
+      className="relative"
       onPointerDown={handlers.onPointerDown}
       onPointerUp={handlers.onPointerUp}
       onPointerLeave={handlers.onPointerLeave}
       onPointerCancel={handlers.onPointerCancel}
       onClick={(e) => e.stopPropagation()}
     >
-      <ArrowUpIcon className="h-3.5 w-3.5" />
+      <HoldProgressRing
+        isPressing={isPressing}
+        colorClassName="stroke-yellow-400"
+        className="absolute inset-0 m-auto"
+      />
+      <ArrowUpIcon className="relative z-10 h-3.5 w-3.5" />
       <span className="sr-only">Pick up</span>
     </Button>
   );
@@ -163,8 +209,8 @@ function RosterCard({
   };
 
   const holdColorClassName = isCheckedIn
-    ? "bg-orange-500/30"
-    : "bg-green-500/25";
+    ? "stroke-orange-500"
+    : "stroke-green-500";
 
   const canPickUp = student.status === "active";
 
@@ -195,10 +241,6 @@ function RosterCard({
     },
   };
 
-  const overlayIsPressing = isPressing || isPickingUp;
-  const overlayColorClassName = isPickingUp
-    ? "bg-yellow-400/40"
-    : holdColorClassName;
   const nameLine = (
     <span className="flex items-center gap-1.5 text-sm font-medium">
       {isScheduled && <ExpectedDot />}
@@ -211,18 +253,23 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-green-600 p-3 select-none dark:border-green-500"
+        className={cn(
+          "bg-card relative flex touch-none items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 p-3 transition-colors duration-300 select-none",
+          isPressing
+            ? "border-orange-500"
+            : "border-green-600 dark:border-green-500",
+        )}
       >
-        <HoldProgressOverlay
-          isPressing={isPressing}
-          colorClassName={holdColorClassName}
-        />
-        <div className="relative z-10 flex flex-col">
+        <div className="flex flex-col">
           {nameLine}
           <span className="text-muted-foreground text-xs">
             Checked in {row.checkInTime}
           </span>
         </div>
+        <HoldProgressRing
+          isPressing={isPressing}
+          colorClassName={holdColorClassName}
+        />
       </div>
     );
   }
@@ -231,18 +278,18 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
+        className="bg-muted text-muted-foreground relative flex touch-none items-start justify-between gap-2 rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
-          isPressing={isPressing}
-          colorClassName={holdColorClassName}
-        />
-        <div className="relative z-10 flex flex-col">
+        <div className="flex flex-col">
           {nameLine}
           <span className="text-xs">
             {row.checkInTime} &ndash; {row.checkOutTime}
           </span>
         </div>
+        <HoldProgressRing
+          isPressing={isPressing}
+          colorClassName={holdColorClassName}
+        />
       </div>
     );
   }
@@ -251,13 +298,9 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
+        className="bg-muted text-muted-foreground relative flex touch-none items-start justify-between gap-2 rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
-          isPressing={isPressing}
-          colorClassName={holdColorClassName}
-        />
-        <div className="relative z-10 flex flex-col">
+        <div className="flex flex-col">
           {nameLine}
           <span className="flex items-center gap-1.5 text-xs">
             <Badge variant="outline" className="h-4 px-1 text-[10px]">
@@ -266,6 +309,10 @@ function RosterCard({
             {row.pickedUpTime}
           </span>
         </div>
+        <HoldProgressRing
+          isPressing={isPressing}
+          colorClassName={holdColorClassName}
+        />
       </div>
     );
   }
@@ -274,20 +321,27 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 select-none dark:border-amber-400 dark:bg-amber-950/40"
+        className="relative flex touch-none items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 select-none dark:border-amber-400 dark:bg-amber-950/40"
       >
-        <HoldProgressOverlay
-          isPressing={overlayIsPressing}
-          colorClassName={overlayColorClassName}
-        />
-        <div className="relative z-10 flex flex-col">
+        <div className="flex flex-col">
           {nameLine}
           <span className="text-muted-foreground text-xs">
             {excuseReasonLabels[row.reason]}
             {row.notes ? ` — ${row.notes}` : ""}
           </span>
         </div>
-        {canPickUp && <PickUpTrigger handlers={pickUpTriggerHandlers} />}
+        <div className="flex items-center gap-1">
+          <HoldProgressRing
+            isPressing={isPressing}
+            colorClassName={holdColorClassName}
+          />
+          {canPickUp && (
+            <PickUpTrigger
+              handlers={pickUpTriggerHandlers}
+              isPressing={isPickingUp}
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -296,19 +350,26 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 select-none dark:border-rose-400 dark:bg-rose-950/40"
+        className="relative flex touch-none items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 select-none dark:border-rose-400 dark:bg-rose-950/40"
       >
-        <HoldProgressOverlay
-          isPressing={overlayIsPressing}
-          colorClassName={overlayColorClassName}
-        />
-        <div className="relative z-10 flex flex-col">
+        <div className="flex flex-col">
           {nameLine}
           <span className="text-muted-foreground text-xs">
             No show{row.notes ? ` — ${row.notes}` : ""}
           </span>
         </div>
-        {canPickUp && <PickUpTrigger handlers={pickUpTriggerHandlers} />}
+        <div className="flex items-center gap-1">
+          <HoldProgressRing
+            isPressing={isPressing}
+            colorClassName={holdColorClassName}
+          />
+          {canPickUp && (
+            <PickUpTrigger
+              handlers={pickUpTriggerHandlers}
+              isPressing={isPickingUp}
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -316,14 +377,21 @@ function RosterCard({
   return (
     <div
       {...cardHandlers}
-      className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden rounded-lg border p-3 select-none"
+      className="bg-card relative flex touch-none items-center justify-between gap-2 rounded-lg border p-3 select-none"
     >
-      <HoldProgressOverlay
-        isPressing={overlayIsPressing}
-        colorClassName={overlayColorClassName}
-      />
-      <span className="relative z-10">{nameLine}</span>
-      {canPickUp && <PickUpTrigger handlers={pickUpTriggerHandlers} />}
+      <span>{nameLine}</span>
+      <div className="flex items-center gap-1">
+        <HoldProgressRing
+          isPressing={isPressing}
+          colorClassName={holdColorClassName}
+        />
+        {canPickUp && (
+          <PickUpTrigger
+            handlers={pickUpTriggerHandlers}
+            isPressing={isPickingUp}
+          />
+        )}
+      </div>
     </div>
   );
 }

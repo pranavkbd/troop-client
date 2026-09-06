@@ -75,10 +75,10 @@ type RosterRow =
     }
   | { status: "unknown"; student: Student; notes?: string };
 
-// Kept in sync with each HoldProgressOverlay's `duration-[1500ms]` class below.
+// Kept in sync with each HoldProgressBar's `duration-[1500ms]` class below.
 const HOLD_THRESHOLD_MS = 1500;
 
-function HoldProgressOverlay({
+function HoldProgressBar({
   isPressing,
   colorClassName,
 }: {
@@ -89,7 +89,7 @@ function HoldProgressOverlay({
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 origin-left",
+        "pointer-events-none absolute inset-x-0 bottom-0 h-1 origin-left",
         colorClassName,
         isPressing
           ? "scale-x-100 transition-transform duration-[1500ms] ease-linear"
@@ -162,9 +162,7 @@ function RosterCard({
     onDoubleClick: () => onOpenDetail(student.id),
   };
 
-  const holdColorClassName = isCheckedIn
-    ? "bg-orange-500/30"
-    : "bg-green-500/25";
+  const holdColorClassName = isCheckedIn ? "bg-orange-500" : "bg-green-500";
 
   const canPickUp = student.status === "active";
 
@@ -197,7 +195,7 @@ function RosterCard({
 
   const overlayIsPressing = isPressing || isPickingUp;
   const overlayColorClassName = isPickingUp
-    ? "bg-yellow-400/40"
+    ? "bg-yellow-400"
     : holdColorClassName;
   const nameLine = (
     <span className="flex items-center gap-1.5 text-sm font-medium">
@@ -211,9 +209,14 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-green-600 p-3 select-none dark:border-green-500"
+        className={cn(
+          "bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 p-3 transition-colors duration-300 select-none",
+          isPressing
+            ? "border-orange-500"
+            : "border-green-600 dark:border-green-500",
+        )}
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
         />
@@ -233,7 +236,7 @@ function RosterCard({
         {...cardHandlers}
         className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
         />
@@ -253,7 +256,7 @@ function RosterCard({
         {...cardHandlers}
         className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
         />
@@ -276,7 +279,7 @@ function RosterCard({
         {...cardHandlers}
         className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 select-none dark:border-amber-400 dark:bg-amber-950/40"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={overlayIsPressing}
           colorClassName={overlayColorClassName}
         />
@@ -298,7 +301,7 @@ function RosterCard({
         {...cardHandlers}
         className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 select-none dark:border-rose-400 dark:bg-rose-950/40"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={overlayIsPressing}
           colorClassName={overlayColorClassName}
         />
@@ -318,7 +321,7 @@ function RosterCard({
       {...cardHandlers}
       className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden rounded-lg border p-3 select-none"
     >
-      <HoldProgressOverlay
+      <HoldProgressBar
         isPressing={overlayIsPressing}
         colorClassName={overlayColorClassName}
       />

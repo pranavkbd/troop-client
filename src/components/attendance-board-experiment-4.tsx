@@ -4,8 +4,11 @@ import { addDays, format, parseISO, subDays } from "date-fns";
 import {
   ArrowUpIcon,
   CalendarIcon,
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  LogOutIcon,
+  type LucideIcon,
   SearchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -75,10 +78,10 @@ type RosterRow =
     }
   | { status: "unknown"; student: Student; notes?: string };
 
-// Kept in sync with each HoldProgressOverlay's `duration-[1500ms]` class below.
+// Kept in sync with each HoldProgressBar's `duration-[1500ms]` class below.
 const HOLD_THRESHOLD_MS = 1500;
 
-function HoldProgressOverlay({
+function HoldProgressBar({
   isPressing,
   colorClassName,
 }: {
@@ -89,11 +92,36 @@ function HoldProgressOverlay({
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 origin-left",
+        "pointer-events-none absolute inset-x-0 bottom-0 h-1 origin-left",
         colorClassName,
         isPressing
           ? "scale-x-100 transition-transform duration-[1500ms] ease-linear"
           : "scale-x-0 transition-none",
+      )}
+    />
+  );
+}
+
+// A large ghost icon previewing the exact action (check in / check out / pick
+// up) that fades and grows into view over the hold, so intent is explicit.
+function HoldActionIcon({
+  isPressing,
+  icon: Icon,
+  colorClassName,
+}: {
+  isPressing: boolean;
+  icon: LucideIcon;
+  colorClassName: string;
+}) {
+  return (
+    <Icon
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute top-1/2 right-3 h-8 w-8 -translate-y-1/2",
+        colorClassName,
+        isPressing
+          ? "scale-100 opacity-30 transition-[transform,opacity] duration-[1500ms] ease-out"
+          : "scale-50 opacity-0 transition-none",
       )}
     />
   );
@@ -162,9 +190,7 @@ function RosterCard({
     onDoubleClick: () => onOpenDetail(student.id),
   };
 
-  const holdColorClassName = isCheckedIn
-    ? "bg-orange-500/30"
-    : "bg-green-500/25";
+  const holdColorClassName = isCheckedIn ? "bg-orange-500" : "bg-green-500";
 
   const canPickUp = student.status === "active";
 
@@ -197,8 +223,20 @@ function RosterCard({
 
   const overlayIsPressing = isPressing || isPickingUp;
   const overlayColorClassName = isPickingUp
-    ? "bg-yellow-400/40"
+    ? "bg-yellow-400"
     : holdColorClassName;
+
+  const activeIcon: LucideIcon = isPickingUp
+    ? ArrowUpIcon
+    : isCheckedIn
+      ? LogOutIcon
+      : CheckIcon;
+  const activeIconColorClassName = isPickingUp
+    ? "text-yellow-500"
+    : isCheckedIn
+      ? "text-orange-500"
+      : "text-green-500";
+
   const nameLine = (
     <span className="flex items-center gap-1.5 text-sm font-medium">
       {isScheduled && <ExpectedDot />}
@@ -211,11 +249,21 @@ function RosterCard({
     return (
       <div
         {...cardHandlers}
-        className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-green-600 p-3 select-none dark:border-green-500"
+        className={cn(
+          "bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 p-3 transition-colors duration-300 select-none",
+          isPressing
+            ? "border-orange-500"
+            : "border-green-600 dark:border-green-500",
+        )}
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
+        />
+        <HoldActionIcon
+          isPressing={isPressing}
+          icon={activeIcon}
+          colorClassName={activeIconColorClassName}
         />
         <div className="relative z-10 flex flex-col">
           {nameLine}
@@ -233,9 +281,14 @@ function RosterCard({
         {...cardHandlers}
         className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
+        />
+        <HoldActionIcon
+          isPressing={isPressing}
+          icon={activeIcon}
+          colorClassName={activeIconColorClassName}
         />
         <div className="relative z-10 flex flex-col">
           {nameLine}
@@ -253,9 +306,14 @@ function RosterCard({
         {...cardHandlers}
         className="bg-muted text-muted-foreground relative flex touch-none flex-col overflow-hidden rounded-lg border p-3 select-none"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={isPressing}
           colorClassName={holdColorClassName}
+        />
+        <HoldActionIcon
+          isPressing={isPressing}
+          icon={activeIcon}
+          colorClassName={activeIconColorClassName}
         />
         <div className="relative z-10 flex flex-col">
           {nameLine}
@@ -276,9 +334,14 @@ function RosterCard({
         {...cardHandlers}
         className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 select-none dark:border-amber-400 dark:bg-amber-950/40"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={overlayIsPressing}
           colorClassName={overlayColorClassName}
+        />
+        <HoldActionIcon
+          isPressing={overlayIsPressing}
+          icon={activeIcon}
+          colorClassName={activeIconColorClassName}
         />
         <div className="relative z-10 flex flex-col">
           {nameLine}
@@ -298,9 +361,14 @@ function RosterCard({
         {...cardHandlers}
         className="relative flex touch-none items-center justify-between gap-2 overflow-hidden border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 select-none dark:border-rose-400 dark:bg-rose-950/40"
       >
-        <HoldProgressOverlay
+        <HoldProgressBar
           isPressing={overlayIsPressing}
           colorClassName={overlayColorClassName}
+        />
+        <HoldActionIcon
+          isPressing={overlayIsPressing}
+          icon={activeIcon}
+          colorClassName={activeIconColorClassName}
         />
         <div className="relative z-10 flex flex-col">
           {nameLine}
@@ -318,9 +386,14 @@ function RosterCard({
       {...cardHandlers}
       className="bg-card relative flex touch-none items-center justify-between gap-2 overflow-hidden rounded-lg border p-3 select-none"
     >
-      <HoldProgressOverlay
+      <HoldProgressBar
         isPressing={overlayIsPressing}
         colorClassName={overlayColorClassName}
+      />
+      <HoldActionIcon
+        isPressing={overlayIsPressing}
+        icon={activeIcon}
+        colorClassName={activeIconColorClassName}
       />
       <span className="relative z-10">{nameLine}</span>
       {canPickUp && <PickUpTrigger handlers={pickUpTriggerHandlers} />}
