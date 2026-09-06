@@ -8,9 +8,10 @@ import {
   PlusIcon,
   SearchIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-
+import { SwipeableRosterCard } from "@/components/swipeable-roster-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -45,6 +46,7 @@ interface CheckedOutEntry {
   student: Student;
   checkInTime: string;
   checkOutTime: string;
+  pickedUp?: boolean;
 }
 
 export type ExcusedEntry =
@@ -59,6 +61,7 @@ type RosterRow =
       student: Student;
       checkInTime: string;
       checkOutTime: string;
+      pickedUp?: boolean;
     }
   | {
       status: "excused";
@@ -75,17 +78,6 @@ interface AttendanceBoardProps {
   initialPresentStudents: PresentEntry[];
   initialCheckedOutStudents: CheckedOutEntry[];
   initialExcusedStudents: ExcusedEntry[];
-}
-
-function ExpectedDot() {
-  return (
-    <span
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500"
-      title="Expected today"
-    >
-      <span className="sr-only">Expected today</span>
-    </span>
-  );
 }
 
 const excuseReasonLabels: Record<ExcuseReason, string> = {
@@ -200,6 +192,7 @@ export function AttendanceBoard({
           student,
           checkInTime: checkedOutEntry.checkInTime,
           checkOutTime: checkedOutEntry.checkOutTime,
+          pickedUp: checkedOutEntry.pickedUp,
         };
       }
       const presentEntry = present.get(student.id);
@@ -241,7 +234,10 @@ export function AttendanceBoard({
     });
   }
 
-  function checkOutStudent(studentId: string) {
+  function checkOutStudent(
+    studentId: string,
+    options?: { pickedUp?: boolean },
+  ) {
     const entry = present.get(studentId);
     if (!entry) return;
 
@@ -252,9 +248,17 @@ export function AttendanceBoard({
     });
     setCheckedOut((prev) => {
       const next = new Map(prev);
-      next.set(studentId, { ...entry, checkOutTime: formatTime(new Date()) });
+      next.set(studentId, {
+        ...entry,
+        checkOutTime: formatTime(new Date()),
+        pickedUp: options?.pickedUp,
+      });
       return next;
     });
+  }
+
+  function pickUpStudent(studentId: string) {
+    checkOutStudent(studentId, { pickedUp: true });
   }
 
   const trimmedQuery = query.trim().toLowerCase();
@@ -318,31 +322,42 @@ export function AttendanceBoard({
     activeRows.length +
     inactiveRows.length;
 
+  function DetailLink({ studentId }: { studentId: string }) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        nativeButton={false}
+        render={<Link href={`/students/${studentId}`} />}
+      >
+        <PlusIcon className="h-3.5 w-3.5" />
+        <span className="sr-only">View student details</span>
+      </Button>
+    );
+  }
+
   function renderRosterCard(row: RosterRow) {
     if (row.status === "present") {
       return (
-        <div
+        <SwipeableRosterCard
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 dark:border-green-500 dark:bg-green-950/40"
+          studentName={`${row.student.firstName} ${row.student.lastName}`}
+          onCheckOut={() => checkOutStudent(row.student.id)}
+          onPickUp={() => pickUpStudent(row.student.id)}
         >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              Checked in {row.checkInTime}
-            </span>
+          <div className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 dark:border-green-500 dark:bg-green-950/40">
+            <div className="flex flex-col">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                {row.student.firstName} {row.student.lastName}
+                <EnrollmentStatusBadge status={row.student.status} />
+              </span>
+              <span className="text-muted-foreground text-xs">
+                Checked in {row.checkInTime}
+              </span>
+            </div>
+            <DetailLink studentId={row.student.id} />
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => checkOutStudent(row.student.id)}
-          >
-            Check out
-          </Button>
-        </div>
+        </SwipeableRosterCard>
       );
     }
 
@@ -350,96 +365,85 @@ export function AttendanceBoard({
       return (
         <div
           key={row.student.id}
-          className="flex flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
+          className="flex items-center justify-between gap-2 rounded-lg border bg-muted p-3 text-muted-foreground"
         >
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            {scheduledIds.has(row.student.id) && <ExpectedDot />}
-            {row.student.firstName} {row.student.lastName}
-            <EnrollmentStatusBadge status={row.student.status} />
-          </span>
-          <span className="text-xs">
-            {row.checkInTime} &ndash; {row.checkOutTime}
-          </span>
+          <div className="flex flex-col">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              {row.student.firstName} {row.student.lastName}
+              <EnrollmentStatusBadge status={row.student.status} />
+            </span>
+            <span className="text-xs">
+              {row.pickedUp
+                ? `Picked up at ${row.checkOutTime}`
+                : `${row.checkInTime} – ${row.checkOutTime}`}
+            </span>
+          </div>
+          <DetailLink studentId={row.student.id} />
         </div>
       );
     }
 
     if (row.status === "excused") {
       return (
-        <div
+        <SwipeableRosterCard
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 dark:border-amber-400 dark:bg-amber-950/40"
+          studentName={`${row.student.firstName} ${row.student.lastName}`}
+          onCheckIn={() => checkInStudent(row.student)}
         >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              {excuseReasonLabels[row.reason]}
-              {row.notes ? ` — ${row.notes}` : ""}
-            </span>
+          <div className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 dark:border-amber-400 dark:bg-amber-950/40">
+            <div className="flex flex-col">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                {row.student.firstName} {row.student.lastName}
+                <EnrollmentStatusBadge status={row.student.status} />
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {excuseReasonLabels[row.reason]}
+                {row.notes ? ` — ${row.notes}` : ""}
+              </span>
+            </div>
+            <DetailLink studentId={row.student.id} />
           </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
-        </div>
+        </SwipeableRosterCard>
       );
     }
 
     if (row.status === "unknown") {
       return (
-        <div
+        <SwipeableRosterCard
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 dark:border-rose-400 dark:bg-rose-950/40"
+          studentName={`${row.student.firstName} ${row.student.lastName}`}
+          onCheckIn={() => checkInStudent(row.student)}
         >
-          <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
-            <span className="text-muted-foreground text-xs">
-              No show{row.notes ? ` — ${row.notes}` : ""}
-            </span>
+          <div className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 dark:border-rose-400 dark:bg-rose-950/40">
+            <div className="flex flex-col">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                {row.student.firstName} {row.student.lastName}
+                <EnrollmentStatusBadge status={row.student.status} />
+              </span>
+              <span className="text-muted-foreground text-xs">
+                No show{row.notes ? ` — ${row.notes}` : ""}
+              </span>
+            </div>
+            <DetailLink studentId={row.student.id} />
           </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
-        </div>
+        </SwipeableRosterCard>
       );
     }
 
     return (
-      <div
+      <SwipeableRosterCard
         key={row.student.id}
-        className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3"
+        studentName={`${row.student.firstName} ${row.student.lastName}`}
+        onCheckIn={() => checkInStudent(row.student)}
       >
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {scheduledIds.has(row.student.id) && <ExpectedDot />}
-          {row.student.firstName} {row.student.lastName}
-          <EnrollmentStatusBadge status={row.student.status} />
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => checkInStudent(row.student)}
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          <span className="sr-only">Check in</span>
-        </Button>
-      </div>
+        <div className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            {row.student.firstName} {row.student.lastName}
+            <EnrollmentStatusBadge status={row.student.status} />
+          </span>
+          <DetailLink studentId={row.student.id} />
+        </div>
+      </SwipeableRosterCard>
     );
   }
 
