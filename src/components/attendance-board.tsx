@@ -5,11 +5,10 @@ import {
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  PlusIcon,
   SearchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +44,7 @@ interface CheckedOutEntry {
   student: Student;
   checkInTime: string;
   checkOutTime: string;
+  method: "check-out" | "pick-up";
 }
 
 export type ExcusedEntry =
@@ -59,6 +59,7 @@ type RosterRow =
       student: Student;
       checkInTime: string;
       checkOutTime: string;
+      method: "check-out" | "pick-up";
     }
   | {
       status: "excused";
@@ -75,17 +76,6 @@ interface AttendanceBoardProps {
   initialPresentStudents: PresentEntry[];
   initialCheckedOutStudents: CheckedOutEntry[];
   initialExcusedStudents: ExcusedEntry[];
-}
-
-function ExpectedDot() {
-  return (
-    <span
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500"
-      title="Expected today"
-    >
-      <span className="sr-only">Expected today</span>
-    </span>
-  );
 }
 
 const excuseReasonLabels: Record<ExcuseReason, string> = {
@@ -106,6 +96,96 @@ function EnrollmentStatusBadge({ status }: { status: Student["status"] }) {
     <Badge variant="outline" className="h-4 px-1 text-[10px]">
       {label}
     </Badge>
+  );
+}
+
+interface CardOverlayProps {
+  row: RosterRow;
+  onCheckIn: () => void;
+  onCheckOut: () => void;
+  onPickUp: () => void;
+  onMoreInfo: () => void;
+  onClose: () => void;
+}
+
+function CardOverlay({
+  row,
+  onCheckIn,
+  onCheckOut,
+  onPickUp,
+  onMoreInfo,
+  onClose,
+}: CardOverlayProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  const isPresent = row.status === "present";
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-10 flex overflow-hidden rounded-[inherit]"
+    >
+      {isPresent ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCheckOut();
+          }}
+          className="flex flex-1 items-center justify-center bg-red-600 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+        >
+          Check out
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCheckIn();
+          }}
+          className="flex flex-1 items-center justify-center bg-green-600 text-sm font-semibold text-white transition-colors hover:bg-green-700"
+        >
+          Check in
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onPickUp();
+        }}
+        className="flex flex-1 items-center justify-center bg-amber-400 text-sm font-semibold text-white transition-colors hover:bg-amber-500"
+      >
+        Pick up
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onMoreInfo();
+        }}
+        className="flex flex-1 items-center justify-center bg-slate-600 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+      >
+        More info
+      </button>
+    </div>
   );
 }
 
@@ -190,6 +270,7 @@ export function AttendanceBoard({
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
   const [query, setQuery] = useState("");
+  const [openStudentId, setOpenStudentId] = useState<string | null>(null);
 
   const buildRosterRow = useCallback(
     (student: Student): RosterRow => {
@@ -200,6 +281,7 @@ export function AttendanceBoard({
           student,
           checkInTime: checkedOutEntry.checkInTime,
           checkOutTime: checkedOutEntry.checkOutTime,
+          method: checkedOutEntry.method,
         };
       }
       const presentEntry = present.get(student.id);
@@ -241,7 +323,10 @@ export function AttendanceBoard({
     });
   }
 
-  function checkOutStudent(studentId: string) {
+  function checkOutStudent(
+    studentId: string,
+    method: "check-out" | "pick-up" = "check-out",
+  ) {
     const entry = present.get(studentId);
     if (!entry) return;
 
@@ -252,7 +337,11 @@ export function AttendanceBoard({
     });
     setCheckedOut((prev) => {
       const next = new Map(prev);
-      next.set(studentId, { ...entry, checkOutTime: formatTime(new Date()) });
+      next.set(studentId, {
+        ...entry,
+        checkOutTime: formatTime(new Date()),
+        method,
+      });
       return next;
     });
   }
@@ -318,30 +407,70 @@ export function AttendanceBoard({
     activeRows.length +
     inactiveRows.length;
 
+  function cardHeader(row: RosterRow) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm font-medium">
+        {row.student.firstName} {row.student.lastName}
+        <EnrollmentStatusBadge status={row.student.status} />
+      </span>
+    );
+  }
+
+  function cardInteractionProps(row: RosterRow) {
+    return {
+      role: "button" as const,
+      tabIndex: 0,
+      onClick: () => setOpenStudentId(row.student.id),
+      onKeyDown: (event: React.KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setOpenStudentId(row.student.id);
+        }
+      },
+    };
+  }
+
+  function cardOverlay(row: RosterRow) {
+    if (openStudentId !== row.student.id) return null;
+    return (
+      <CardOverlay
+        row={row}
+        onCheckIn={() => {
+          checkInStudent(row.student);
+          setOpenStudentId(null);
+        }}
+        onCheckOut={() => {
+          checkOutStudent(row.student.id, "check-out");
+          setOpenStudentId(null);
+        }}
+        onPickUp={() => {
+          checkOutStudent(row.student.id, "pick-up");
+          setOpenStudentId(null);
+        }}
+        onMoreInfo={() => {
+          setOpenStudentId(null);
+          router.push(`/students/${row.student.id}`);
+        }}
+        onClose={() => setOpenStudentId(null)}
+      />
+    );
+  }
+
   function renderRosterCard(row: RosterRow) {
     if (row.status === "present") {
       return (
         <div
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 dark:border-green-500 dark:bg-green-950/40"
+          {...cardInteractionProps(row)}
+          className="relative flex cursor-pointer items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-green-600 bg-green-50 p-3 dark:border-green-500 dark:bg-green-950/40"
         >
           <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
+            {cardHeader(row)}
             <span className="text-muted-foreground text-xs">
               Checked in {row.checkInTime}
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => checkOutStudent(row.student.id)}
-          >
-            Check out
-          </Button>
+          {cardOverlay(row)}
         </div>
       );
     }
@@ -350,16 +479,16 @@ export function AttendanceBoard({
       return (
         <div
           key={row.student.id}
-          className="flex flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
+          {...cardInteractionProps(row)}
+          className="relative flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
         >
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            {scheduledIds.has(row.student.id) && <ExpectedDot />}
-            {row.student.firstName} {row.student.lastName}
-            <EnrollmentStatusBadge status={row.student.status} />
-          </span>
+          {cardHeader(row)}
           <span className="text-xs">
-            {row.checkInTime} &ndash; {row.checkOutTime}
+            {row.method === "pick-up"
+              ? `Picked up ${row.checkOutTime}`
+              : `${row.checkInTime} – ${row.checkOutTime}`}
           </span>
+          {cardOverlay(row)}
         </div>
       );
     }
@@ -368,27 +497,17 @@ export function AttendanceBoard({
       return (
         <div
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 dark:border-amber-400 dark:bg-amber-950/40"
+          {...cardInteractionProps(row)}
+          className="relative flex cursor-pointer items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-amber-500 bg-amber-50 p-3 dark:border-amber-400 dark:bg-amber-950/40"
         >
           <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
+            {cardHeader(row)}
             <span className="text-muted-foreground text-xs">
               {excuseReasonLabels[row.reason]}
               {row.notes ? ` — ${row.notes}` : ""}
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
+          {cardOverlay(row)}
         </div>
       );
     }
@@ -397,26 +516,16 @@ export function AttendanceBoard({
       return (
         <div
           key={row.student.id}
-          className="flex items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 dark:border-rose-400 dark:bg-rose-950/40"
+          {...cardInteractionProps(row)}
+          className="relative flex cursor-pointer items-center justify-between gap-2 border-x-0 border-t-0 border-b-2 border-rose-500 bg-rose-50 p-3 dark:border-rose-400 dark:bg-rose-950/40"
         >
           <div className="flex flex-col">
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              {scheduledIds.has(row.student.id) && <ExpectedDot />}
-              {row.student.firstName} {row.student.lastName}
-              <EnrollmentStatusBadge status={row.student.status} />
-            </span>
+            {cardHeader(row)}
             <span className="text-muted-foreground text-xs">
               No show{row.notes ? ` — ${row.notes}` : ""}
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => checkInStudent(row.student)}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            <span className="sr-only">Check in</span>
-          </Button>
+          {cardOverlay(row)}
         </div>
       );
     }
@@ -424,21 +533,11 @@ export function AttendanceBoard({
     return (
       <div
         key={row.student.id}
-        className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3"
+        {...cardInteractionProps(row)}
+        className="relative flex cursor-pointer items-center justify-between gap-2 rounded-lg border bg-card p-3"
       >
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {scheduledIds.has(row.student.id) && <ExpectedDot />}
-          {row.student.firstName} {row.student.lastName}
-          <EnrollmentStatusBadge status={row.student.status} />
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => checkInStudent(row.student)}
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          <span className="sr-only">Check in</span>
-        </Button>
+        {cardHeader(row)}
+        {cardOverlay(row)}
       </div>
     );
   }

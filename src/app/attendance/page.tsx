@@ -92,6 +92,7 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
             student,
             checkInTime: record.checkInTime ?? "—",
             checkOutTime: record.checkOutTime ?? "—",
+            method: "check-out" as const,
           },
         ]
       : [];
