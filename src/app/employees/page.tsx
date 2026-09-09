@@ -22,6 +22,7 @@ export default function EmployeesPage() {
         <DataTable
           columns={columns}
           data={employees}
+          rowHrefBase="/employees"
           searchPlaceholder="Search employees..."
           entityLabel="employee"
         />

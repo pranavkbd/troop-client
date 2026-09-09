@@ -10,6 +10,7 @@ import type { Employee, EmployeeRole } from "@/lib/types";
 const roleVariant: Record<EmployeeRole, "default" | "secondary"> = {
   "Front Desk": "secondary",
   Instructor: "default",
+  Admin: "default",
 };
 
 const columnHelper = createColumnHelper<DataTableFeatures, Employee>();

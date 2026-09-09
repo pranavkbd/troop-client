@@ -458,6 +458,7 @@ export const employees: Employee[] = [
   { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
   { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
   { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
+  { id: "emp-6", name: "Ms. Whitfield", pin: "4321", role: "Admin" },
 ];
 
 const FRONT_DESK_STAFF = employees.map((employee) => employee.name);

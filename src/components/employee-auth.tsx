@@ -103,6 +103,10 @@ export function EmployeeAuthGate({
                   setSelectedEmployeeId(value ?? "");
                   setError(false);
                 }}
+                items={employees.map((employee) => ({
+                  value: employee.id,
+                  label: employee.name,
+                }))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select your name" />
