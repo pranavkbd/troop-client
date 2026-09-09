@@ -26,6 +26,15 @@ export interface Student {
   enrolledAt: string;
 }
 
+export type EmployeeRole = "Front Desk" | "Instructor";
+
+export interface Employee {
+  id: string;
+  name: string;
+  pin: string;
+  role: EmployeeRole;
+}
+
 export interface Enrollment {
   id: string;
   studentId: string;

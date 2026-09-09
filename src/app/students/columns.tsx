@@ -3,7 +3,7 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { ArrowUpDown, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-
+import type { DataTableFeatures } from "@/components/data-table-features";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Student, StudentStatus } from "@/lib/types";
-
-import type { DataTableFeatures } from "./data-table-features";
 
 const statusVariant: Record<
   StudentStatus,

@@ -1,5 +1,5 @@
 import { columns } from "@/app/students/columns";
-import { DataTable } from "@/app/students/data-table";
+import { DataTable } from "@/components/data-table";
 import {
   Card,
   CardContent,

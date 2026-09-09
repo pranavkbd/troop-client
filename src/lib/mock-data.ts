@@ -5,6 +5,7 @@ import type {
   AttendanceRecord,
   AttendanceStatus,
   DayOfWeek,
+  Employee,
   Enrollment,
   ExcuseReason,
   Student,
@@ -451,7 +452,15 @@ const excuseNotesByReason: Record<ExcuseReason, string> = {
   other: "Excused by guardian",
 };
 
-const FRONT_DESK_STAFF = ["Front Desk", "Ms. Delgado", "Mr. Nakamura"];
+export const employees: Employee[] = [
+  { id: "emp-1", name: "Front Desk", pin: "1234", role: "Front Desk" },
+  { id: "emp-2", name: "Ms. Delgado", pin: "2468", role: "Instructor" },
+  { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
+  { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
+  { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
+];
+
+const FRONT_DESK_STAFF = employees.map((employee) => employee.name);
 
 // ---------------------------------------------------------------------------
 // Attendance store

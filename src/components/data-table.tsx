@@ -35,12 +35,16 @@ interface DataTableProps<TData extends RowData> {
   data: TData[];
   /** Base path to navigate to on row click, e.g. "/students". Requires each row to have an `id` field. */
   rowHrefBase?: string;
+  searchPlaceholder?: string;
+  entityLabel?: string;
 }
 
 export function DataTable<TData extends RowData & { id: string }>({
   columns,
   data,
   rowHrefBase,
+  searchPlaceholder = "Search students...",
+  entityLabel = "student",
 }: DataTableProps<TData>) {
   const router = useRouter();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -71,7 +75,7 @@ export function DataTable<TData extends RowData & { id: string }>({
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <Input
-          placeholder="Search students..."
+          placeholder={searchPlaceholder}
           value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
           onChange={(event) =>
             table.getColumn("name")?.setFilterValue(event.target.value)
@@ -152,7 +156,7 @@ export function DataTable<TData extends RowData & { id: string }>({
 
       <div className="flex items-center justify-between">
         <div className="text-muted-foreground text-sm">
-          {table.getFilteredRowModel().rows.length} student(s).
+          {table.getFilteredRowModel().rows.length} {entityLabel}(s).
         </div>
         {table.getPageCount() > 1 && (
           <div className="flex items-center space-x-2">

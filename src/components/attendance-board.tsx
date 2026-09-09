@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-
+import { useEmployeeSession } from "@/components/employee-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -39,12 +39,15 @@ function byName(a: Student, b: Student) {
 interface PresentEntry {
   student: Student;
   checkInTime: string;
+  checkedInBy?: string;
 }
 
 interface CheckedOutEntry {
   student: Student;
   checkInTime: string;
   checkOutTime: string;
+  checkedInBy?: string;
+  checkedOutBy?: string;
 }
 
 export type ExcusedEntry =
@@ -53,12 +56,19 @@ export type ExcusedEntry =
 
 type RosterRow =
   | { status: "not-checked-in"; student: Student }
-  | { status: "present"; student: Student; checkInTime: string }
+  | {
+      status: "present";
+      student: Student;
+      checkInTime: string;
+      checkedInBy?: string;
+    }
   | {
       status: "checked-out";
       student: Student;
       checkInTime: string;
       checkOutTime: string;
+      checkedInBy?: string;
+      checkedOutBy?: string;
     }
   | {
       status: "excused";
@@ -157,6 +167,7 @@ export function AttendanceBoard({
   initialExcusedStudents,
 }: AttendanceBoardProps) {
   const router = useRouter();
+  const { employee } = useEmployeeSession();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const selectedDateObj = useMemo(() => parseISO(selectedDate), [selectedDate]);
   const formattedToday = useMemo(
@@ -200,6 +211,8 @@ export function AttendanceBoard({
           student,
           checkInTime: checkedOutEntry.checkInTime,
           checkOutTime: checkedOutEntry.checkOutTime,
+          checkedInBy: checkedOutEntry.checkedInBy,
+          checkedOutBy: checkedOutEntry.checkedOutBy,
         };
       }
       const presentEntry = present.get(student.id);
@@ -208,6 +221,7 @@ export function AttendanceBoard({
           status: "present",
           student,
           checkInTime: presentEntry.checkInTime,
+          checkedInBy: presentEntry.checkedInBy,
         };
       }
       const excusedEntry = excused.get(student.id);
@@ -230,7 +244,11 @@ export function AttendanceBoard({
   function checkInStudent(student: Student) {
     setPresent((prev) => {
       const next = new Map(prev);
-      next.set(student.id, { student, checkInTime: formatTime(new Date()) });
+      next.set(student.id, {
+        student,
+        checkInTime: formatTime(new Date()),
+        checkedInBy: employee.name,
+      });
       return next;
     });
     setExcused((prev) => {
@@ -252,7 +270,11 @@ export function AttendanceBoard({
     });
     setCheckedOut((prev) => {
       const next = new Map(prev);
-      next.set(studentId, { ...entry, checkOutTime: formatTime(new Date()) });
+      next.set(studentId, {
+        ...entry,
+        checkOutTime: formatTime(new Date()),
+        checkedOutBy: employee.name,
+      });
       return next;
     });
   }
@@ -333,6 +355,7 @@ export function AttendanceBoard({
             </span>
             <span className="text-muted-foreground text-xs">
               Checked in {row.checkInTime}
+              {row.checkedInBy ? ` by ${row.checkedInBy}` : ""}
             </span>
           </div>
           <Button
@@ -359,6 +382,7 @@ export function AttendanceBoard({
           </span>
           <span className="text-xs">
             {row.checkInTime} &ndash; {row.checkOutTime}
+            {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
           </span>
         </div>
       );

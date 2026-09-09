@@ -2,7 +2,13 @@ import {
   AttendanceBoard,
   type ExcusedEntry,
 } from "@/components/attendance-board";
-import { attendanceRecords, enrollments, students } from "@/lib/mock-data";
+import { EmployeeAuthGate } from "@/components/employee-auth";
+import {
+  attendanceRecords,
+  employees,
+  enrollments,
+  students,
+} from "@/lib/mock-data";
 
 const DEFAULT_DATE = "2026-08-25";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -85,14 +91,16 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
   });
 
   return (
-    <AttendanceBoard
-      key={selectedDate}
-      selectedDate={selectedDate}
-      allStudents={students}
-      scheduledTimes={scheduledTimes}
-      initialExcusedStudents={initialExcusedStudents}
-      initialPresentStudents={initialPresentStudents}
-      initialCheckedOutStudents={initialCheckedOutStudents}
-    />
+    <EmployeeAuthGate employees={employees}>
+      <AttendanceBoard
+        key={selectedDate}
+        selectedDate={selectedDate}
+        allStudents={students}
+        scheduledTimes={scheduledTimes}
+        initialExcusedStudents={initialExcusedStudents}
+        initialPresentStudents={initialPresentStudents}
+        initialCheckedOutStudents={initialCheckedOutStudents}
+      />
+    </EmployeeAuthGate>
   );
 }
