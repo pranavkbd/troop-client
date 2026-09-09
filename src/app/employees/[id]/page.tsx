@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Barcode } from "@/components/barcode";
 import { ChangePinForm } from "@/components/change-pin-form";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,19 @@ export default async function EmployeeDetailPage(
               Employee ID {employee.id}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Badge barcode</CardTitle>
+          <CardDescription>
+            Scanned at the Scan Station to identify who recorded an attendance
+            action.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Barcode value={employee.barcode} />
         </CardContent>
       </Card>
 

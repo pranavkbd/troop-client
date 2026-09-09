@@ -11,6 +11,7 @@ const links = [
   { href: "/students", label: "Students" },
   { href: "/employees", label: "Employees" },
   { href: "/attendance", label: "Attendance" },
+  { href: "/scan", label: "Scan" },
 ];
 
 export function SiteHeader() {

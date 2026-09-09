@@ -46,6 +46,7 @@ interface CheckedOutEntry {
   student: Student;
   checkInTime: string;
   checkOutTime: string;
+  pickedUpTime?: string;
   checkedInBy?: string;
   checkedOutBy?: string;
 }
@@ -67,6 +68,7 @@ type RosterRow =
       student: Student;
       checkInTime: string;
       checkOutTime: string;
+      pickedUpTime?: string;
       checkedInBy?: string;
       checkedOutBy?: string;
     }
@@ -211,6 +213,7 @@ export function AttendanceBoard({
           student,
           checkInTime: checkedOutEntry.checkInTime,
           checkOutTime: checkedOutEntry.checkOutTime,
+          pickedUpTime: checkedOutEntry.pickedUpTime,
           checkedInBy: checkedOutEntry.checkedInBy,
           checkedOutBy: checkedOutEntry.checkedOutBy,
         };
@@ -383,6 +386,7 @@ export function AttendanceBoard({
           <span className="text-xs">
             {row.checkInTime} &ndash; {row.checkOutTime}
             {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
+            {row.pickedUpTime ? ` · Picked up ${row.pickedUpTime}` : ""}
           </span>
         </div>
       );

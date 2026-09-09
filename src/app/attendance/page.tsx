@@ -4,9 +4,9 @@ import {
 } from "@/components/attendance-board";
 import { EmployeeAuthGate } from "@/components/employee-auth";
 import {
-  attendanceRecords,
   employees,
   enrollments,
+  getAttendanceRecords,
   students,
 } from "@/lib/mock-data";
 
@@ -35,8 +35,13 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
     }
   }
 
+  const attendanceRecords = getAttendanceRecords().filter(
+    (record) => !record.voidedAt,
+  );
   const todaysRecords = attendanceRecords.filter(
-    (record) => record.date === selectedDate && record.status === "present",
+    (record) =>
+      record.date === selectedDate &&
+      (record.status === "present" || record.status === "late"),
   );
 
   const initialExcusedStudents: ExcusedEntry[] = students.flatMap(
@@ -85,6 +90,7 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
             student,
             checkInTime: record.checkInTime ?? "—",
             checkOutTime: record.checkOutTime ?? "—",
+            pickedUpTime: record.pickedUpTime,
           },
         ]
       : [];

@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { attendanceRecords, enrollments, students } from "@/lib/mock-data";
+import { enrollments, getAttendanceRecords, students } from "@/lib/mock-data";
 import type { DayOfWeek, Enrollment } from "@/lib/types";
 
 const today = "2026-08-25";
@@ -19,7 +19,7 @@ function groupKey(enrollment: Enrollment) {
 
 export default function Home() {
   const activeStudents = students.filter((s) => s.status === "active");
-  const todayRecords = attendanceRecords.filter((a) => a.date === today);
+  const todayRecords = getAttendanceRecords().filter((a) => a.date === today);
   const presentCount = todayRecords.filter(
     (a) => a.status === "present" || a.status === "late",
   ).length;

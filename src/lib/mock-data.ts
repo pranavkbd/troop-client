@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
 
+import { employeeBarcode, studentBarcode } from "@/lib/barcode";
 import type {
   ActivityLogEntry,
   AttendanceRecord,
@@ -24,10 +25,12 @@ const generatedStatuses: Student["status"][] = [
   "inactive",
 ];
 
-function generateStudents(count: number, startNumber: number): Student[] {
+type StudentSeed = Omit<Student, "barcode">;
+
+function generateStudents(count: number, startNumber: number): StudentSeed[] {
   faker.seed(1234);
 
-  const result: Student[] = [];
+  const result: StudentSeed[] = [];
   for (let i = 0; i < count; i++) {
     const idNumber = startNumber + i;
     const firstName = faker.person.firstName();
@@ -51,7 +54,7 @@ function generateStudents(count: number, startNumber: number): Student[] {
   return result;
 }
 
-export const students: Student[] = [
+const studentSeeds: StudentSeed[] = [
   {
     id: "100001",
     firstName: "Ava",
@@ -255,6 +258,11 @@ export const students: Student[] = [
   ...generateStudents(180, 21),
 ];
 
+export const students: Student[] = studentSeeds.map((seed) => ({
+  ...seed,
+  barcode: studentBarcode(seed.id),
+}));
+
 // Manually-curated schedule slots for the narrative students, inlined from
 // what used to be the shared `sess1`..`sess4` catalog so the seeded story
 // (Ava/Sofia/Mia Tue 16:00, Ethan/Zoe Thu 16:00, Zoe/Oliver Sat 10:00) is
@@ -452,14 +460,19 @@ const excuseNotesByReason: Record<ExcuseReason, string> = {
   other: "Excused by guardian",
 };
 
-export const employees: Employee[] = [
-  { id: "emp-1", name: "Front Desk", pin: "1234", role: "Front Desk" },
-  { id: "emp-2", name: "Ms. Delgado", pin: "2468", role: "Instructor" },
-  { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
-  { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
-  { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
-  { id: "emp-6", name: "Ms. Whitfield", pin: "4321", role: "Admin" },
-];
+export const employees: Employee[] = (
+  [
+    { id: "emp-1", name: "Front Desk", pin: "1234", role: "Front Desk" },
+    { id: "emp-2", name: "Ms. Delgado", pin: "2468", role: "Instructor" },
+    { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
+    { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
+    { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
+    { id: "emp-6", name: "Ms. Whitfield", pin: "4321", role: "Admin" },
+  ] satisfies Omit<Employee, "barcode">[]
+).map((employee, index) => ({
+  ...employee,
+  barcode: employeeBarcode(index + 1),
+}));
 
 const FRONT_DESK_STAFF = employees.map((employee) => employee.name);
 
@@ -505,9 +518,23 @@ function upsertAttendanceRecord(
     id: recordId,
     status: "present",
     ...existing,
+    // Every legitimate write un-voids the slot; voidAttendanceRecord is the
+    // only caller that re-sets these through `patch`.
+    voidedAt: undefined,
+    voidReason: undefined,
     ...base,
     ...patch,
   });
+}
+
+export function getAttendanceRecord(
+  recordId: string,
+): AttendanceRecord | undefined {
+  return attendanceRecordsById.get(recordId);
+}
+
+export function attendanceRecordId(enrollmentId: string, date: string) {
+  return `${enrollmentId}-${date}`;
 }
 
 const LATE_THRESHOLD_MINUTES = 10;
@@ -518,7 +545,7 @@ function minutesLate(scheduledStart: string, checkInTime: string): number {
   return inHours * 60 + inMinutes - (startHours * 60 + startMinutes);
 }
 
-function recordCheckIn(params: {
+export function recordCheckIn(params: {
   enrollmentId: string;
   date: string;
   time: string;
@@ -535,7 +562,7 @@ function recordCheckIn(params: {
 
   withTransaction(() => {
     appendEvent({
-      id: `log-${recordId}-checkin`,
+      id: `log-${recordId}-checkin-${activityLogEntries.length}`,
       studentId: enrollment.studentId,
       employeeName: params.employeeName,
       action: "Checked In",
@@ -561,7 +588,7 @@ function recordCheckIn(params: {
   return recordId;
 }
 
-function recordCheckOut(params: {
+export function recordCheckOut(params: {
   enrollmentId: string;
   date: string;
   time: string;
@@ -576,7 +603,7 @@ function recordCheckOut(params: {
 
   withTransaction(() => {
     appendEvent({
-      id: `log-${recordId}-checkout`,
+      id: `log-${recordId}-checkout-${activityLogEntries.length}`,
       studentId: enrollment.studentId,
       employeeName: params.employeeName,
       action: "Checked Out",
@@ -592,6 +619,67 @@ function recordCheckOut(params: {
         date: params.date,
       },
       { checkOutTime: params.time },
+    );
+  });
+
+  return recordId;
+}
+
+/**
+ * A guardian collected the student. If the student was still checked in, the
+ * pick-up also closes the session: both "Checked Out" and "Picked Up" are
+ * logged, because both actually happened.
+ */
+export function recordPickUp(params: {
+  enrollmentId: string;
+  date: string;
+  time: string;
+  employeeName: string;
+}): string {
+  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
+  if (!enrollment) {
+    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
+  }
+
+  const recordId = `${params.enrollmentId}-${params.date}`;
+  const existing = attendanceRecordsById.get(recordId);
+  const needsCheckOut = !existing?.checkOutTime;
+
+  withTransaction(() => {
+    if (needsCheckOut) {
+      appendEvent({
+        id: `log-${recordId}-checkout-${activityLogEntries.length}`,
+        studentId: enrollment.studentId,
+        employeeName: params.employeeName,
+        action: "Checked Out",
+        occurredAt: `${params.date}T${params.time}:00`,
+        metadata: {
+          attendanceRecordId: recordId,
+          enrollmentId: enrollment.id,
+          impliedByPickUp: true,
+        },
+      });
+    }
+
+    appendEvent({
+      id: `log-${recordId}-pickup-${activityLogEntries.length}`,
+      studentId: enrollment.studentId,
+      employeeName: params.employeeName,
+      action: "Picked Up",
+      occurredAt: `${params.date}T${params.time}:00`,
+      metadata: { attendanceRecordId: recordId, enrollmentId: enrollment.id },
+    });
+
+    upsertAttendanceRecord(
+      recordId,
+      {
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        date: params.date,
+      },
+      needsCheckOut
+        ? { checkOutTime: params.time, pickedUpTime: params.time }
+        : { pickedUpTime: params.time },
     );
   });
 
@@ -1090,10 +1178,14 @@ seedNarrativeAttendance();
 seedGeneratedExcusedRecords();
 seedEditsAndVoids();
 
-export const attendanceRecords: AttendanceRecord[] = Array.from(
-  attendanceRecordsById.values(),
-);
+/** Current derived summary rows. Read live so server-action writes show up. */
+export function getAttendanceRecords(): AttendanceRecord[] {
+  return Array.from(attendanceRecordsById.values());
+}
 
-export const activityLog: ActivityLogEntry[] = [...activityLogEntries].sort(
-  (a, b) => b.occurredAt.localeCompare(a.occurredAt),
-);
+/** The append-only ledger, newest first. */
+export function getActivityLog(): ActivityLogEntry[] {
+  return [...activityLogEntries].sort((a, b) =>
+    b.occurredAt.localeCompare(a.occurredAt),
+  );
+}

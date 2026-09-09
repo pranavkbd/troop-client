@@ -2,6 +2,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { Barcode } from "@/components/barcode";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import {
   Card,
   CardAction,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -22,9 +24,9 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  activityLog,
-  attendanceRecords,
   enrollments,
+  getActivityLog,
+  getAttendanceRecords,
   students,
 } from "@/lib/mock-data";
 import { EXPERIMENT_DAYS } from "@/lib/schedule-experiment-utils";
@@ -120,11 +122,11 @@ export default async function StudentDetailPage(
     notFound();
   }
 
-  const history = attendanceRecords
+  const history = getAttendanceRecords()
     .filter((record) => record.studentId === student.id && !record.voidedAt)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  const studentActivityLog = activityLog.filter(
+  const studentActivityLog = getActivityLog().filter(
     (entry) => entry.studentId === student.id,
   );
 
@@ -187,6 +189,19 @@ export default async function StudentDetailPage(
               </Badge>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Barcode</CardTitle>
+          <CardDescription>
+            Print this for the student's folder. Scanning it at the Scan Station
+            checks them in, out, or records a pick-up.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Barcode value={student.barcode} />
         </CardContent>
       </Card>
 
@@ -262,6 +277,7 @@ export default async function StudentDetailPage(
                       <TableHead>Date</TableHead>
                       <TableHead>Check-in</TableHead>
                       <TableHead>Check-out</TableHead>
+                      <TableHead>Picked up</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -272,6 +288,7 @@ export default async function StudentDetailPage(
                           <TableCell>{formatDate(record.date)}</TableCell>
                           <TableCell>{record.checkInTime ?? "—"}</TableCell>
                           <TableCell>{record.checkOutTime ?? "—"}</TableCell>
+                          <TableCell>{record.pickedUpTime ?? "—"}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {record.notes ?? "—"}
                           </TableCell>
@@ -280,7 +297,7 @@ export default async function StudentDetailPage(
                     ) : (
                       <TableRow>
                         <TableCell
-                          colSpan={4}
+                          colSpan={5}
                           className="h-24 text-center text-muted-foreground"
                         >
                           No attendance records yet.

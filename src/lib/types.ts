@@ -24,6 +24,8 @@ export interface Student {
   levels: Partial<Record<Subject, string>>;
   status: StudentStatus;
   enrolledAt: string;
+  /** Value encoded on the student's printed barcode, e.g. "S100001". */
+  barcode: string;
 }
 
 export type EmployeeRole = "Front Desk" | "Instructor" | "Admin";
@@ -33,6 +35,8 @@ export interface Employee {
   name: string;
   pin: string;
   role: EmployeeRole;
+  /** Value encoded on the employee's badge barcode, e.g. "E00001". */
+  barcode: string;
 }
 
 export interface Enrollment {
@@ -49,6 +53,7 @@ export interface Enrollment {
 export type ActivityAction =
   | "Checked In"
   | "Checked Out"
+  | "Picked Up"
   | "Marked Absent"
   | "Marked Excused"
   | "Edited Attendance Record"
@@ -72,6 +77,8 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   checkInTime?: string;
   checkOutTime?: string;
+  /** Set when a guardian collected the student; implies the session is closed. */
+  pickedUpTime?: string;
   excuseReason?: ExcuseReason;
   notes?: string;
   /** Set when the record has been retracted; the row is kept for its history, not deleted. */
