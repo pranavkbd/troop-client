@@ -1,13 +1,14 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -19,12 +20,61 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { attendanceRecords, enrollments, students } from "@/lib/mock-data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  type AttendanceStatus,
+  activityLog,
+  attendanceRecords,
+  enrollments,
+  students,
+} from "@/lib/mock-data";
+import { EXPERIMENT_DAYS } from "@/lib/schedule-experiment-utils";
+import {
   compareByDayThenTime,
+  type DayOfWeek,
+  type Enrollment,
   type StudentStatus,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const DAY_INDEX: Record<DayOfWeek, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function formatTime12h(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const period = hours >= 12 ? "pm" : "am";
+  const hours12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hours12}:${String(minutes).padStart(2, "0")}${period}`;
+}
+
+function getNextOccurrence(
+  enrollment: Pick<Enrollment, "dayOfWeek" | "startTime">,
+  from: Date,
+) {
+  const [hours, minutes] = enrollment.startTime.split(":").map(Number);
+  const next = new Date(from);
+  next.setHours(hours, minutes, 0, 0);
+
+  let daysUntil = (DAY_INDEX[enrollment.dayOfWeek] - from.getDay() + 7) % 7;
+  if (daysUntil === 0 && next <= from) {
+    daysUntil = 7;
+  }
+  next.setDate(next.getDate() + daysUntil);
+  return next;
+}
+
+function formatNextSessionDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
 
 const statusVariant: Record<
   StudentStatus,
@@ -35,16 +85,22 @@ const statusVariant: Record<
   inactive: "outline",
 };
 
-const attendanceStatusVariant: Record<
-  AttendanceStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  present: "default",
-  late: "secondary",
-  excused: "outline",
-  absent: "destructive",
-  unknown: "secondary",
-};
+function formatActivityTimestamp(isoDateTime: string) {
+  const date = new Date(isoDateTime);
+  const datePart = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const period = hours >= 12 ? "pm" : "am";
+  const hours12 = hours % 12 === 0 ? 12 : hours % 12;
+  const timePart = `${hours12}:${String(minutes).padStart(2, "0")}${period}`;
+
+  return `${datePart}, ${timePart}`;
+}
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -65,16 +121,31 @@ export default async function StudentDetailPage(
   }
 
   const history = attendanceRecords
-    .filter((record) => record.studentId === student.id)
-    .map((record) => ({
-      record,
-      enrollment: enrollments.find((e) => e.id === record.enrollmentId),
-    }))
-    .sort((a, b) => b.record.date.localeCompare(a.record.date));
+    .filter((record) => record.studentId === student.id && !record.voidedAt)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const studentActivityLog = activityLog.filter(
+    (entry) => entry.studentId === student.id,
+  );
 
   const schedule = enrollments
     .filter((enrollment) => enrollment.studentId === student.id)
     .sort(compareByDayThenTime);
+
+  const now = new Date();
+  const nextSession = schedule
+    .map((enrollment) => ({
+      enrollment,
+      date: getNextOccurrence(enrollment, now),
+    }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+
+  const weeklyOverview = EXPERIMENT_DAYS.map((day) => ({
+    day,
+    enrollment: schedule.find(
+      (enrollment) => (enrollment.dayOfWeek as string) === day,
+    ),
+  }));
 
   const initials = `${student.firstName[0]}${student.lastName[0]}`;
 
@@ -119,144 +190,158 @@ export default async function StudentDetailPage(
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Contact</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Email</span>
-              <span>{student.email ?? "—"}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Phone</span>
-              <span>{student.phone ?? "—"}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Guardian</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Name</span>
-              <span>{student.guardianName}</span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Phone</span>
-              <span>{student.guardianPhone}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle>Schedule</CardTitle>
-          <CardDescription>
-            {schedule.length} scheduled session
-            {schedule.length === 1 ? "" : "s"}.
-          </CardDescription>
+          <CardAction>
+            <Button
+              variant="outline"
+              size="sm"
+              render={
+                <Link href={`/students/${student.id}/schedule-experiment-2`} />
+              }
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit schedule
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Day</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Instructor</TableHead>
-                  <TableHead>Room</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {schedule.length ? (
-                  schedule.map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell>{enrollment.subject}</TableCell>
-                      <TableCell>{enrollment.dayOfWeek}</TableCell>
-                      <TableCell>
-                        {enrollment.startTime}–{enrollment.endTime}
-                      </TableCell>
-                      <TableCell>{enrollment.instructor}</TableCell>
-                      <TableCell>{enrollment.room ?? "—"}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      No scheduled sessions.
-                    </TableCell>
-                  </TableRow>
+          <div className="grid grid-cols-7 gap-2">
+            {weeklyOverview.map(({ day }) => (
+              <div
+                key={day}
+                className="rounded-md bg-muted px-2 py-1.5 text-center text-sm font-medium"
+              >
+                {day}
+              </div>
+            ))}
+            {weeklyOverview.map(({ day, enrollment }) => (
+              <div
+                key={day}
+                className={cn(
+                  "rounded-md px-2 py-1.5 text-center text-sm ring-1 ring-foreground/10",
+                  enrollment
+                    ? "bg-green-600 font-medium text-white ring-transparent dark:bg-green-500"
+                    : "text-muted-foreground",
                 )}
-              </TableBody>
-            </Table>
+              >
+                {enrollment ? formatTime12h(enrollment.startTime) : "–"}
+              </div>
+            ))}
           </div>
+          {nextSession ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Next session: {formatNextSessionDate(nextSession.date)} at{" "}
+              {formatTime12h(nextSession.enrollment.startTime)}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Attendance history</CardTitle>
-          <CardDescription>
-            {history.length} check-in{history.length === 1 ? "" : "s"} recorded.
-          </CardDescription>
+          <CardTitle>History</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Session</TableHead>
-                  <TableHead>Check-in</TableHead>
-                  <TableHead>Check-out</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Notes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.length ? (
-                  history.map(({ record, enrollment }) => (
-                    <TableRow key={record.id}>
-                      <TableCell>{formatDate(record.date)}</TableCell>
-                      <TableCell>
-                        {enrollment
-                          ? `${enrollment.subject} · ${enrollment.dayOfWeek} ${enrollment.startTime}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell>{record.checkInTime ?? "—"}</TableCell>
-                      <TableCell>{record.checkOutTime ?? "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant={attendanceStatusVariant[record.status]}>
-                          {record.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {record.notes ?? "—"}
-                      </TableCell>
+          <Tabs defaultValue="attendance">
+            <TabsList>
+              <TabsTrigger value="attendance">Attendance</TabsTrigger>
+              <TabsTrigger value="activity-log">Activity Log</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="attendance" className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground">
+                {history.length} check-in{history.length === 1 ? "" : "s"}{" "}
+                recorded.
+              </p>
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Check-in</TableHead>
+                      <TableHead>Check-out</TableHead>
+                      <TableHead>Notes</TableHead>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      No attendance records yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {history.length ? (
+                      history.map((record) => (
+                        <TableRow key={record.id}>
+                          <TableCell>{formatDate(record.date)}</TableCell>
+                          <TableCell>{record.checkInTime ?? "—"}</TableCell>
+                          <TableCell>{record.checkOutTime ?? "—"}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {record.notes ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="h-24 text-center text-muted-foreground"
+                        >
+                          No attendance records yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="activity-log" className="flex flex-col gap-2">
+              <p className="text-sm text-muted-foreground">
+                {studentActivityLog.length} activity log entr
+                {studentActivityLog.length === 1 ? "y" : "ies"}.
+              </p>
+              <div className="overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date &amp; time</TableHead>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Metadata</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {studentActivityLog.length ? (
+                      studentActivityLog.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {formatActivityTimestamp(entry.occurredAt)}
+                          </TableCell>
+                          <TableCell>{entry.employeeName}</TableCell>
+                          <TableCell>{entry.action}</TableCell>
+                          <TableCell>
+                            {student.firstName} {student.lastName}
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-xs text-muted-foreground">
+                              {JSON.stringify(entry.metadata)}
+                            </code>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="h-24 text-center text-muted-foreground"
+                        >
+                          No activity recorded yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

@@ -37,6 +37,24 @@ export interface Enrollment {
   room?: string;
 }
 
+export type ActivityAction =
+  | "Checked In"
+  | "Checked Out"
+  | "Marked Absent"
+  | "Marked Excused"
+  | "Edited Attendance Record"
+  | "Voided Attendance Record";
+
+export interface ActivityLogEntry {
+  id: string;
+  studentId: string;
+  employeeName: string;
+  action: ActivityAction;
+  /** ISO 8601 timestamp */
+  occurredAt: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface AttendanceRecord {
   id: string;
   studentId: string;
@@ -47,6 +65,9 @@ export interface AttendanceRecord {
   checkOutTime?: string;
   excuseReason?: ExcuseReason;
   notes?: string;
+  /** Set when the record has been retracted; the row is kept for its history, not deleted. */
+  voidedAt?: string;
+  voidReason?: string;
 }
 
 export const DAY_ORDER: DayOfWeek[] = [

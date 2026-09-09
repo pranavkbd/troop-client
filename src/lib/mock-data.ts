@@ -1,6 +1,7 @@
 import { faker } from "@faker-js/faker";
 
 import type {
+  ActivityLogEntry,
   AttendanceRecord,
   AttendanceStatus,
   DayOfWeek,
@@ -450,97 +451,312 @@ const excuseNotesByReason: Record<ExcuseReason, string> = {
   other: "Excused by guardian",
 };
 
-function generateExcusedRecords(): AttendanceRecord[] {
-  faker.seed(91011);
+const FRONT_DESK_STAFF = ["Front Desk", "Ms. Delgado", "Mr. Nakamura"];
 
-  const candidates = enrollments.filter(
-    (enrollment) =>
-      enrollment.dayOfWeek === "Tue" && Number(enrollment.studentId) >= 100021,
-  );
-  const picks = faker.helpers.arrayElements(candidates, 14);
-  const [excusedPicks, unknownPicks] = [picks.slice(0, 10), picks.slice(10)];
+// ---------------------------------------------------------------------------
+// Attendance store
+//
+// `activityLogEntries` is the source of truth: every check-in, check-out,
+// edit, and void is appended here and never rewritten. `attendanceRecordsById`
+// is a derived summary table (one row per enrollment/date) kept in sync with
+// it on every write, inside a "transaction," so the two can never drift.
+// ---------------------------------------------------------------------------
 
-  const excusedRecords: AttendanceRecord[] = excusedPicks.map(
-    (enrollment, index) => {
-      const excuseReason = faker.helpers.arrayElement(excuseReasons);
-      const status: AttendanceStatus = faker.helpers.arrayElement([
-        "absent",
-        "excused",
-      ]);
-      return {
-        id: `a-excused-${index}`,
-        studentId: enrollment.studentId,
-        enrollmentId: enrollment.id,
-        date: "2026-08-25",
-        status,
-        excuseReason,
-        notes: excuseNotesByReason[excuseReason],
-      };
-    },
-  );
+const activityLogEntries: ActivityLogEntry[] = [];
+const attendanceRecordsById = new Map<string, AttendanceRecord>();
 
-  const unknownRecords: AttendanceRecord[] = unknownPicks.map(
-    (enrollment, index) => ({
-      id: `a-unknown-${index}`,
-      studentId: enrollment.studentId,
-      enrollmentId: enrollment.id,
-      date: "2026-08-25",
-      status: "unknown",
-      notes: "No show, no reason given",
-    }),
-  );
-
-  return [...excusedRecords, ...unknownRecords];
+function withTransaction<T>(fn: () => T): T {
+  const logSnapshot = [...activityLogEntries];
+  const recordsSnapshot = new Map(attendanceRecordsById);
+  try {
+    return fn();
+  } catch (error) {
+    activityLogEntries.length = 0;
+    activityLogEntries.push(...logSnapshot);
+    attendanceRecordsById.clear();
+    for (const [id, record] of recordsSnapshot) {
+      attendanceRecordsById.set(id, record);
+    }
+    throw error;
+  }
 }
 
-export const attendanceRecords: AttendanceRecord[] = [
+function appendEvent(entry: ActivityLogEntry) {
+  activityLogEntries.push(entry);
+}
+
+function upsertAttendanceRecord(
+  recordId: string,
+  base: Pick<AttendanceRecord, "studentId" | "enrollmentId" | "date">,
+  patch: Partial<AttendanceRecord>,
+) {
+  const existing = attendanceRecordsById.get(recordId);
+  attendanceRecordsById.set(recordId, {
+    id: recordId,
+    status: "present",
+    ...existing,
+    ...base,
+    ...patch,
+  });
+}
+
+const LATE_THRESHOLD_MINUTES = 10;
+
+function minutesLate(scheduledStart: string, checkInTime: string): number {
+  const [startHours, startMinutes] = scheduledStart.split(":").map(Number);
+  const [inHours, inMinutes] = checkInTime.split(":").map(Number);
+  return inHours * 60 + inMinutes - (startHours * 60 + startMinutes);
+}
+
+function recordCheckIn(params: {
+  enrollmentId: string;
+  date: string;
+  time: string;
+  employeeName: string;
+}): string {
+  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
+  if (!enrollment) {
+    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
+  }
+
+  const recordId = `${params.enrollmentId}-${params.date}`;
+  const isLate =
+    minutesLate(enrollment.startTime, params.time) > LATE_THRESHOLD_MINUTES;
+
+  withTransaction(() => {
+    appendEvent({
+      id: `log-${recordId}-checkin`,
+      studentId: enrollment.studentId,
+      employeeName: params.employeeName,
+      action: "Checked In",
+      occurredAt: `${params.date}T${params.time}:00`,
+      metadata: {
+        attendanceRecordId: recordId,
+        enrollmentId: enrollment.id,
+        room: enrollment.room ?? null,
+      },
+    });
+
+    upsertAttendanceRecord(
+      recordId,
+      {
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        date: params.date,
+      },
+      { status: isLate ? "late" : "present", checkInTime: params.time },
+    );
+  });
+
+  return recordId;
+}
+
+function recordCheckOut(params: {
+  enrollmentId: string;
+  date: string;
+  time: string;
+  employeeName: string;
+}): string {
+  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
+  if (!enrollment) {
+    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
+  }
+
+  const recordId = `${params.enrollmentId}-${params.date}`;
+
+  withTransaction(() => {
+    appendEvent({
+      id: `log-${recordId}-checkout`,
+      studentId: enrollment.studentId,
+      employeeName: params.employeeName,
+      action: "Checked Out",
+      occurredAt: `${params.date}T${params.time}:00`,
+      metadata: { attendanceRecordId: recordId, enrollmentId: enrollment.id },
+    });
+
+    upsertAttendanceRecord(
+      recordId,
+      {
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        date: params.date,
+      },
+      { checkOutTime: params.time },
+    );
+  });
+
+  return recordId;
+}
+
+function recordAbsence(params: {
+  enrollmentId: string;
+  date: string;
+  status: Extract<AttendanceStatus, "absent" | "excused" | "unknown">;
+  employeeName: string;
+  excuseReason?: ExcuseReason;
+  notes?: string;
+}): string {
+  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
+  if (!enrollment) {
+    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
+  }
+
+  const recordId = `${params.enrollmentId}-${params.date}`;
+
+  withTransaction(() => {
+    appendEvent({
+      id: `log-${recordId}-${params.status}`,
+      studentId: enrollment.studentId,
+      employeeName: params.employeeName,
+      action: params.status === "excused" ? "Marked Excused" : "Marked Absent",
+      occurredAt: `${params.date}T08:30:00`,
+      metadata: {
+        attendanceRecordId: recordId,
+        reason: params.excuseReason ?? null,
+        notes: params.notes ?? null,
+      },
+    });
+
+    upsertAttendanceRecord(
+      recordId,
+      {
+        studentId: enrollment.studentId,
+        enrollmentId: enrollment.id,
+        date: params.date,
+      },
+      {
+        status: params.status,
+        excuseReason: params.excuseReason,
+        notes: params.notes,
+      },
+    );
+  });
+
+  return recordId;
+}
+
+function editAttendanceField(params: {
+  recordId: string;
+  field: "checkInTime" | "checkOutTime";
+  newValue: string;
+  employeeName: string;
+  occurredAt: string;
+}) {
+  const existing = attendanceRecordsById.get(params.recordId);
+  if (!existing) {
+    throw new Error(`Unknown attendance record ${params.recordId}`);
+  }
+
+  const previousValue = existing[params.field] ?? null;
+
+  withTransaction(() => {
+    appendEvent({
+      id: `log-${params.recordId}-edit-${params.field}-${activityLogEntries.length}`,
+      studentId: existing.studentId,
+      employeeName: params.employeeName,
+      action: "Edited Attendance Record",
+      occurredAt: params.occurredAt,
+      metadata: {
+        attendanceRecordId: params.recordId,
+        field: params.field,
+        previousValue,
+        newValue: params.newValue,
+      },
+    });
+
+    upsertAttendanceRecord(
+      params.recordId,
+      {
+        studentId: existing.studentId,
+        enrollmentId: existing.enrollmentId,
+        date: existing.date,
+      },
+      { [params.field]: params.newValue },
+    );
+  });
+}
+
+function voidAttendanceRecord(params: {
+  recordId: string;
+  reason: string;
+  employeeName: string;
+  occurredAt: string;
+}) {
+  const existing = attendanceRecordsById.get(params.recordId);
+  if (!existing) {
+    throw new Error(`Unknown attendance record ${params.recordId}`);
+  }
+
+  withTransaction(() => {
+    appendEvent({
+      id: `log-${params.recordId}-void`,
+      studentId: existing.studentId,
+      employeeName: params.employeeName,
+      action: "Voided Attendance Record",
+      occurredAt: params.occurredAt,
+      metadata: {
+        attendanceRecordId: params.recordId,
+        reason: params.reason,
+        snapshot: { ...existing },
+      },
+    });
+
+    upsertAttendanceRecord(
+      params.recordId,
+      {
+        studentId: existing.studentId,
+        enrollmentId: existing.enrollmentId,
+        date: existing.date,
+      },
+      { voidedAt: params.occurredAt, voidReason: params.reason },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Seed data — every attendance fact below is written through the functions
+// above, so `attendanceRecords` and `activityLog` (exported at the bottom)
+// are always consistent with each other by construction.
+// ---------------------------------------------------------------------------
+
+interface NarrativeEntry {
+  enrollmentId: string;
+  date: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  status?: Extract<AttendanceStatus, "absent" | "excused">;
+  notes?: string;
+  excuseReason?: ExcuseReason;
+}
+
+const narrativeAttendance: NarrativeEntry[] = [
+  // Week of 2026-08-25
   {
-    id: "a1",
-    studentId: "100001",
     enrollmentId: "e1",
     date: "2026-08-25",
-    status: "present",
     checkInTime: "16:02",
     checkOutTime: "17:28",
   },
   {
-    id: "a2",
-    studentId: "100003",
     enrollmentId: "e4",
     date: "2026-08-25",
-    status: "late",
     checkInTime: "16:15",
     checkOutTime: "17:30",
   },
   {
-    id: "a3",
-    studentId: "100005",
     enrollmentId: "e6",
     date: "2026-08-25",
-    status: "present",
     checkInTime: "15:58",
     checkOutTime: "17:25",
   },
+  { enrollmentId: "e2", date: "2026-08-25", status: "absent", notes: "Sick" },
   {
-    id: "a4",
-    studentId: "100001",
-    enrollmentId: "e2",
-    date: "2026-08-25",
-    status: "absent",
-    notes: "Sick",
-  },
-  {
-    id: "a5",
-    studentId: "100003",
     enrollmentId: "e5",
     date: "2026-08-25",
-    status: "present",
     checkInTime: "16:05",
     checkOutTime: "17:29",
   },
   {
-    id: "a6",
-    studentId: "100005",
     enrollmentId: "e7",
     date: "2026-08-25",
     status: "excused",
@@ -550,274 +766,324 @@ export const attendanceRecords: AttendanceRecord[] = [
 
   // Week of 2026-08-18
   {
-    id: "a7",
-    studentId: "100001",
     enrollmentId: "e1",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:30",
   },
   {
-    id: "a8",
-    studentId: "100001",
     enrollmentId: "e2",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "16:03",
     checkOutTime: "17:29",
   },
   {
-    id: "a9",
-    studentId: "100003",
     enrollmentId: "e4",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "16:01",
     checkOutTime: "17:30",
   },
   {
-    id: "a10",
-    studentId: "100003",
     enrollmentId: "e5",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "16:06",
     checkOutTime: "17:31",
   },
   {
-    id: "a11",
-    studentId: "100005",
     enrollmentId: "e6",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "15:57",
     checkOutTime: "17:26",
   },
   {
-    id: "a12",
-    studentId: "100005",
     enrollmentId: "e7",
     date: "2026-08-18",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:30",
   },
   {
-    id: "a13",
-    studentId: "100007",
     enrollmentId: "e9",
     date: "2026-08-22",
-    status: "present",
     checkInTime: "10:01",
     checkOutTime: "11:29",
   },
   {
-    id: "a14",
-    studentId: "100008",
     enrollmentId: "e10",
     date: "2026-08-22",
-    status: "present",
     checkInTime: "10:00",
     checkOutTime: "11:28",
   },
   {
-    id: "a15",
-    studentId: "100002",
     enrollmentId: "e3",
     date: "2026-08-20",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:32",
   },
   {
-    id: "a16",
-    studentId: "100007",
     enrollmentId: "e8",
     date: "2026-08-20",
-    status: "present",
     checkInTime: "16:02",
     checkOutTime: "17:30",
   },
 
   // Week of 2026-08-11
   {
-    id: "a17",
-    studentId: "100001",
     enrollmentId: "e1",
     date: "2026-08-11",
-    status: "late",
     checkInTime: "16:12",
     checkOutTime: "17:30",
   },
   {
-    id: "a18",
-    studentId: "100001",
     enrollmentId: "e2",
     date: "2026-08-11",
-    status: "present",
     checkInTime: "16:01",
     checkOutTime: "17:28",
   },
   {
-    id: "a19",
-    studentId: "100003",
     enrollmentId: "e4",
     date: "2026-08-11",
-    status: "present",
     checkInTime: "15:58",
     checkOutTime: "17:29",
   },
   {
-    id: "a20",
-    studentId: "100003",
     enrollmentId: "e5",
     date: "2026-08-11",
     status: "excused",
     notes: "Doctor appointment",
   },
   {
-    id: "a21",
-    studentId: "100005",
     enrollmentId: "e6",
     date: "2026-08-11",
-    status: "present",
     checkInTime: "16:03",
     checkOutTime: "17:29",
   },
   {
-    id: "a22",
-    studentId: "100005",
     enrollmentId: "e7",
     date: "2026-08-11",
-    status: "present",
     checkInTime: "16:01",
     checkOutTime: "17:31",
   },
   {
-    id: "a23",
-    studentId: "100002",
     enrollmentId: "e3",
     date: "2026-08-13",
-    status: "late",
     checkInTime: "16:18",
     checkOutTime: "17:32",
   },
   {
-    id: "a24",
-    studentId: "100007",
     enrollmentId: "e8",
     date: "2026-08-13",
-    status: "late",
     checkInTime: "16:18",
     checkOutTime: "17:32",
   },
   {
-    id: "a25",
-    studentId: "100007",
     enrollmentId: "e9",
     date: "2026-08-15",
-    status: "present",
     checkInTime: "09:59",
     checkOutTime: "11:30",
   },
   {
-    id: "a26",
-    studentId: "100008",
     enrollmentId: "e10",
     date: "2026-08-15",
-    status: "present",
     checkInTime: "10:02",
     checkOutTime: "11:30",
   },
 
   // Week of 2026-08-04
   {
-    id: "a27",
-    studentId: "100001",
     enrollmentId: "e1",
     date: "2026-08-04",
-    status: "present",
     checkInTime: "15:59",
     checkOutTime: "17:31",
   },
   {
-    id: "a28",
-    studentId: "100001",
     enrollmentId: "e2",
     date: "2026-08-04",
     status: "absent",
     notes: "Family event",
   },
   {
-    id: "a29",
-    studentId: "100003",
     enrollmentId: "e4",
     date: "2026-08-04",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:30",
   },
   {
-    id: "a30",
-    studentId: "100003",
     enrollmentId: "e5",
     date: "2026-08-04",
-    status: "present",
     checkInTime: "16:02",
     checkOutTime: "17:28",
   },
   {
-    id: "a31",
-    studentId: "100005",
     enrollmentId: "e6",
     date: "2026-08-04",
     status: "absent",
     notes: "Vacation",
   },
   {
-    id: "a32",
-    studentId: "100005",
     enrollmentId: "e7",
     date: "2026-08-04",
     status: "absent",
     notes: "Vacation",
   },
   {
-    id: "a33",
-    studentId: "100002",
     enrollmentId: "e3",
     date: "2026-08-06",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:31",
   },
   {
-    id: "a34",
-    studentId: "100007",
     enrollmentId: "e8",
     date: "2026-08-06",
-    status: "present",
     checkInTime: "16:00",
     checkOutTime: "17:31",
   },
   {
-    id: "a35",
-    studentId: "100007",
     enrollmentId: "e9",
     date: "2026-08-08",
     status: "excused",
     notes: "Family trip",
   },
   {
-    id: "a36",
-    studentId: "100008",
     enrollmentId: "e10",
     date: "2026-08-08",
-    status: "present",
     checkInTime: "09:58",
     checkOutTime: "11:29",
   },
-
-  ...generateExcusedRecords(),
 ];
+
+function seedNarrativeAttendance() {
+  for (const entry of narrativeAttendance) {
+    const enrollment = enrollments.find((e) => e.id === entry.enrollmentId);
+    if (!enrollment) continue;
+
+    if (entry.status) {
+      recordAbsence({
+        enrollmentId: entry.enrollmentId,
+        date: entry.date,
+        status: entry.status,
+        employeeName: faker.helpers.arrayElement(FRONT_DESK_STAFF),
+        excuseReason: entry.excuseReason,
+        notes: entry.notes,
+      });
+      continue;
+    }
+
+    if (entry.checkInTime) {
+      recordCheckIn({
+        enrollmentId: entry.enrollmentId,
+        date: entry.date,
+        time: entry.checkInTime,
+        employeeName: enrollment.instructor,
+      });
+    }
+    if (entry.checkOutTime) {
+      recordCheckOut({
+        enrollmentId: entry.enrollmentId,
+        date: entry.date,
+        time: entry.checkOutTime,
+        employeeName: enrollment.instructor,
+      });
+    }
+  }
+}
+
+function seedGeneratedExcusedRecords() {
+  faker.seed(91011);
+
+  const candidates = enrollments.filter(
+    (enrollment) =>
+      enrollment.dayOfWeek === "Tue" && Number(enrollment.studentId) >= 100021,
+  );
+  const picks = faker.helpers.arrayElements(candidates, 14);
+  const [excusedPicks, unknownPicks] = [picks.slice(0, 10), picks.slice(10)];
+
+  for (const enrollment of excusedPicks) {
+    const excuseReason = faker.helpers.arrayElement(excuseReasons);
+    const status = faker.helpers.arrayElement<"absent" | "excused">([
+      "absent",
+      "excused",
+    ]);
+    recordAbsence({
+      enrollmentId: enrollment.id,
+      date: "2026-08-25",
+      status,
+      employeeName: faker.helpers.arrayElement(FRONT_DESK_STAFF),
+      excuseReason,
+      notes: excuseNotesByReason[excuseReason],
+    });
+  }
+
+  for (const enrollment of unknownPicks) {
+    recordAbsence({
+      enrollmentId: enrollment.id,
+      date: "2026-08-25",
+      status: "unknown",
+      employeeName: faker.helpers.arrayElement(FRONT_DESK_STAFF),
+      notes: "No show, no reason given",
+    });
+  }
+}
+
+function seedEditsAndVoids() {
+  faker.seed(13579);
+
+  const allRecordIds = Array.from(attendanceRecordsById.keys());
+
+  const editableRecordIds = allRecordIds.filter((id) => {
+    const record = attendanceRecordsById.get(id);
+    return record && (record.checkInTime || record.checkOutTime);
+  });
+  const recordsToEdit = faker.helpers.arrayElements(
+    editableRecordIds,
+    Math.min(8, editableRecordIds.length),
+  );
+
+  for (const recordId of recordsToEdit) {
+    const record = attendanceRecordsById.get(recordId);
+    if (!record) continue;
+
+    const editableFields = (["checkInTime", "checkOutTime"] as const).filter(
+      (field) => record[field],
+    );
+    const field = faker.helpers.arrayElement(editableFields);
+    const currentValue = record[field] as string;
+    const [hours, minutes] = currentValue.split(":").map(Number);
+    const driftMinutes = faker.helpers.arrayElement([-10, -5, 5, 10]);
+    const corrected = new Date(2000, 0, 1, hours, minutes + driftMinutes);
+    const newValue = `${String(corrected.getHours()).padStart(2, "0")}:${String(corrected.getMinutes()).padStart(2, "0")}`;
+
+    editAttendanceField({
+      recordId,
+      field,
+      newValue,
+      employeeName: faker.helpers.arrayElement(FRONT_DESK_STAFF),
+      occurredAt: "2026-09-10T11:30:00",
+    });
+  }
+
+  const voidCandidateIds = faker.helpers.arrayElements(
+    allRecordIds,
+    Math.min(4, allRecordIds.length),
+  );
+
+  voidCandidateIds.forEach((recordId, index) => {
+    voidAttendanceRecord({
+      recordId,
+      reason: "Duplicate entry",
+      employeeName: faker.helpers.arrayElement(FRONT_DESK_STAFF),
+      occurredAt: `2026-09-1${index + 1}T09:15:00`,
+    });
+  });
+}
+
+seedNarrativeAttendance();
+seedGeneratedExcusedRecords();
+seedEditsAndVoids();
+
+export const attendanceRecords: AttendanceRecord[] = Array.from(
+  attendanceRecordsById.values(),
+);
+
+export const activityLog: ActivityLogEntry[] = [...activityLogEntries].sort(
+  (a, b) => b.occurredAt.localeCompare(a.occurredAt),
+);
