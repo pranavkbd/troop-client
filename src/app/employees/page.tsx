@@ -1,4 +1,4 @@
-import { columns } from "@/app/students/columns";
+import { columns } from "@/app/employees/columns";
 import { DataTable } from "@/components/data-table";
 import {
   Card,
@@ -7,23 +7,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { students } from "@/lib/mock-data";
+import { employees } from "@/lib/mock-data";
 
-export default function StudentsPage() {
+export default function EmployeesPage() {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-2xl font-semibold tracking-tight">
-          Students
+          Employees
         </CardTitle>
-        <CardDescription>{students.length} students enrolled.</CardDescription>
+        <CardDescription>{employees.length} employees.</CardDescription>
       </CardHeader>
       <CardContent>
         <DataTable
           columns={columns}
-          data={students}
-          rowHrefBase="/students"
-          printQueueKind="student"
+          data={employees}
+          rowHrefBase="/employees"
+          searchPlaceholder="Search employees..."
+          entityLabel="employee"
+          printQueueKind="employee"
         />
       </CardContent>
     </Card>

@@ -2,15 +2,17 @@ import {
   AttendanceBoardV2,
   type ExcusedEntry,
 } from "@/components/attendance-board-v2";
-import {
-  attendanceRecords,
-  enrollments,
-  sessions,
-  students,
-} from "@/lib/mock-data";
+import { enrollments, getAttendanceRecords, students } from "@/lib/mock-data";
 
-const DEFAULT_DATE = "2026-08-25";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export default async function AttendanceV2Page(
   props: PageProps<"/attendance-v2">,
@@ -20,32 +22,29 @@ export default async function AttendanceV2Page(
   const selectedDate =
     typeof rawDate === "string" && DATE_PATTERN.test(rawDate)
       ? rawDate
-      : DEFAULT_DATE;
+      : todayLocal();
   const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
 
   const selectedDayOfWeek = new Intl.DateTimeFormat("en-US", {
     weekday: "short",
   }).format(selectedDateObj);
 
-  const sessionsToday = sessions.filter(
-    (session) => session.dayOfWeek === selectedDayOfWeek,
-  );
-  const sessionStartTimeById = new Map(
-    sessionsToday.map((session) => [session.id, session.startTime]),
-  );
-
   const scheduledTimes: Record<string, string> = {};
   for (const enrollment of enrollments) {
-    const startTime = sessionStartTimeById.get(enrollment.sessionId);
-    if (!startTime) continue;
+    if (enrollment.dayOfWeek !== selectedDayOfWeek) continue;
     const current = scheduledTimes[enrollment.studentId];
-    if (!current || startTime < current) {
-      scheduledTimes[enrollment.studentId] = startTime;
+    if (!current || enrollment.startTime < current) {
+      scheduledTimes[enrollment.studentId] = enrollment.startTime;
     }
   }
 
+  const attendanceRecords = getAttendanceRecords().filter(
+    (record) => !record.voidedAt,
+  );
   const todaysRecords = attendanceRecords.filter(
-    (record) => record.date === selectedDate && record.status === "present",
+    (record) =>
+      record.date === selectedDate &&
+      (record.status === "present" || record.status === "late"),
   );
 
   const initialExcusedStudents: ExcusedEntry[] = students.flatMap(

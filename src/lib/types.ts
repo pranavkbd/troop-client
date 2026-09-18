@@ -26,31 +26,108 @@ export interface Student {
   enrolledAt: string;
 }
 
-export interface Session {
+export type BarcodeVoidReason = "lost" | "damaged" | "other";
+
+export type BarcodeOwnerKind = "student" | "employee";
+
+/**
+ * A person's barcode, printed on a bag tag or staff badge. The value encodes
+ * the barcode's own serial, not the person's ID, so a lost tag can be
+ * replaced without the person's identity changing. Every student and
+ * employee has exactly one active barcode at all times; Replace voids the
+ * old one and issues the next in a single step.
+ */
+export interface Barcode {
+  /** Serial, e.g. "5000001" (students) or "10001" (employees). */
   id: string;
-  dayOfWeek: DayOfWeek;
-  startTime: string;
-  endTime: string;
-  subject: Subject;
-  instructor: string;
-  room?: string;
+  ownerKind: BarcodeOwnerKind;
+  ownerId: string;
+  /** Printed value: prefix + serial + check digit, e.g. "S50000015". */
+  value: string;
+  /** ISO 8601 timestamp */
+  issuedAt: string;
+  issuedBy: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: BarcodeVoidReason;
+  /** Free-text context for the replacement, e.g. "left on the bus". */
+  voidNote?: string;
+}
+
+export type EmployeeRole = "Front Desk" | "Instructor" | "Admin";
+
+export interface Employee {
+  id: string;
+  name: string;
+  pin: string;
+  role: EmployeeRole;
 }
 
 export interface Enrollment {
   id: string;
   studentId: string;
-  sessionId: string;
   subject: Subject;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  instructor: string;
+  room?: string;
+}
+
+export type ActivityAction =
+  | "Checked In"
+  | "Checked Out"
+  | "Picked Up"
+  | "Issued Barcode"
+  | "Voided Barcode"
+  | "Marked Absent"
+  | "Marked Excused"
+  | "Edited Attendance Record"
+  | "Voided Attendance Record";
+
+export interface ActivityLogEntry {
+  id: string;
+  studentId: string;
+  employeeName: string;
+  action: ActivityAction;
+  /** ISO 8601 timestamp */
+  occurredAt: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface AttendanceRecord {
   id: string;
   studentId: string;
-  sessionId: string;
+  /** Absent for a walk-in: a session the student wasn't scheduled for. */
+  enrollmentId?: string;
   date: string;
   status: AttendanceStatus;
   checkInTime?: string;
   checkOutTime?: string;
+  /** Set when a guardian collected the student; implies the session is closed. */
+  pickedUpTime?: string;
   excuseReason?: ExcuseReason;
   notes?: string;
+  /** Set when the record has been retracted; the row is kept for its history, not deleted. */
+  voidedAt?: string;
+  voidReason?: string;
+}
+
+export const DAY_ORDER: DayOfWeek[] = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+];
+
+export function compareByDayThenTime(
+  a: { dayOfWeek: DayOfWeek; startTime: string },
+  b: { dayOfWeek: DayOfWeek; startTime: string },
+): number {
+  const dayDiff =
+    DAY_ORDER.indexOf(a.dayOfWeek) - DAY_ORDER.indexOf(b.dayOfWeek);
+  if (dayDiff !== 0) return dayDiff;
+  return a.startTime.localeCompare(b.startTime);
 }

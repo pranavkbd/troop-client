@@ -9,8 +9,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
-
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { useEmployeeSession } from "@/components/employee-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,6 +27,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { recordBoardAttendance } from "@/lib/attendance-actions";
+import type { ScanAction } from "@/lib/scan";
 import type { ExcuseReason, Student } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -39,17 +42,16 @@ function byName(a: Student, b: Student) {
 interface PresentEntry {
   student: Student;
   checkInTime: string;
+  checkedInBy?: string;
 }
 
 interface CheckedOutEntry {
   student: Student;
   checkInTime: string;
   checkOutTime: string;
-}
-
-interface PickedUpEntry {
-  student: Student;
-  pickupTime: string;
+  pickedUpTime?: string;
+  checkedInBy?: string;
+  checkedOutBy?: string;
 }
 
 export type ExcusedEntry =
@@ -58,14 +60,28 @@ export type ExcusedEntry =
 
 type RosterRow =
   | { status: "not-checked-in"; student: Student }
-  | { status: "present"; student: Student; checkInTime: string }
+  | {
+      status: "present";
+      student: Student;
+      checkInTime: string;
+      checkedInBy?: string;
+    }
   | {
       status: "checked-out";
       student: Student;
       checkInTime: string;
       checkOutTime: string;
+      pickedUpTime?: string;
+      checkedInBy?: string;
+      checkedOutBy?: string;
     }
-  | { status: "picked-up"; student: Student; pickupTime: string }
+  | {
+      status: "picked-up";
+      student: Student;
+      checkInTime: string;
+      checkOutTime: string;
+      pickupTime: string;
+    }
   | {
       status: "excused";
       student: Student;
@@ -152,6 +168,7 @@ export function AttendanceBoard({
   initialExcusedStudents,
 }: AttendanceBoardProps) {
   const router = useRouter();
+  const { employee } = useEmployeeSession();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const selectedDateObj = useMemo(() => parseISO(selectedDate), [selectedDate]);
   const formattedToday = useMemo(
@@ -184,9 +201,6 @@ export function AttendanceBoard({
     () =>
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
-  const [pickedUp, setPickedUp] = useState<Map<string, PickedUpEntry>>(
-    () => new Map(),
-  );
   const [query, setQuery] = useState("");
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(
     null,
@@ -196,23 +210,55 @@ export function AttendanceBoard({
     setExpandedStudentId((prev) => (prev === studentId ? null : studentId));
   }, []);
 
+  const [, startTransition] = useTransition();
+
+  /**
+   * Every board click is written to the ledger. The local maps update
+   * optimistically so the card moves at once; if the ledger refuses, the
+   * snapshot taken before the click is restored and the refusal is shown.
+   */
+  function persist(action: ScanAction, student: Student, time: string) {
+    const snapshot = { present, checkedOut, excused };
+    startTransition(async () => {
+      const result = await recordBoardAttendance({
+        action,
+        employeeId: employee.id,
+        studentId: student.id,
+        date: selectedDate,
+        time,
+      });
+      if (result.ok) {
+        if (result.detail) toast.message(result.detail);
+        return;
+      }
+      toast.error(result.message, { description: result.detail });
+      setPresent(snapshot.present);
+      setCheckedOut(snapshot.checkedOut);
+      setExcused(snapshot.excused);
+    });
+  }
+
   const buildRosterRow = useCallback(
     (student: Student): RosterRow => {
-      const pickedUpEntry = pickedUp.get(student.id);
-      if (pickedUpEntry) {
+      const checkedOutEntry = checkedOut.get(student.id);
+      if (checkedOutEntry?.pickedUpTime) {
         return {
           status: "picked-up",
           student,
-          pickupTime: pickedUpEntry.pickupTime,
+          checkInTime: checkedOutEntry.checkInTime,
+          checkOutTime: checkedOutEntry.checkOutTime,
+          pickupTime: checkedOutEntry.pickedUpTime,
         };
       }
-      const checkedOutEntry = checkedOut.get(student.id);
       if (checkedOutEntry) {
         return {
           status: "checked-out",
           student,
           checkInTime: checkedOutEntry.checkInTime,
           checkOutTime: checkedOutEntry.checkOutTime,
+          pickedUpTime: checkedOutEntry.pickedUpTime,
+          checkedInBy: checkedOutEntry.checkedInBy,
+          checkedOutBy: checkedOutEntry.checkedOutBy,
         };
       }
       const presentEntry = present.get(student.id);
@@ -221,6 +267,7 @@ export function AttendanceBoard({
           status: "present",
           student,
           checkInTime: presentEntry.checkInTime,
+          checkedInBy: presentEntry.checkedInBy,
         };
       }
       const excusedEntry = excused.get(student.id);
@@ -237,19 +284,18 @@ export function AttendanceBoard({
       }
       return { status: "not-checked-in", student };
     },
-    [present, checkedOut, excused, pickedUp],
+    [present, checkedOut, excused],
   );
 
   function checkInStudent(student: Student) {
+    const time = formatTime(new Date());
     setPresent((prev) => {
       const next = new Map(prev);
-      next.set(student.id, { student, checkInTime: formatTime(new Date()) });
-      return next;
-    });
-    setExcused((prev) => {
-      if (!prev.has(student.id)) return prev;
-      const next = new Map(prev);
-      next.delete(student.id);
+      next.set(student.id, {
+        student,
+        checkInTime: time,
+        checkedInBy: employee.name,
+      });
       return next;
     });
     setCheckedOut((prev) => {
@@ -258,17 +304,19 @@ export function AttendanceBoard({
       next.delete(student.id);
       return next;
     });
-    setPickedUp((prev) => {
+    setExcused((prev) => {
       if (!prev.has(student.id)) return prev;
       const next = new Map(prev);
       next.delete(student.id);
       return next;
     });
+    persist("check-in", student, time);
   }
 
   function checkOutStudent(studentId: string) {
     const entry = present.get(studentId);
     if (!entry) return;
+    const time = formatTime(new Date());
 
     setPresent((prev) => {
       const next = new Map(prev);
@@ -277,17 +325,33 @@ export function AttendanceBoard({
     });
     setCheckedOut((prev) => {
       const next = new Map(prev);
-      next.set(studentId, { ...entry, checkOutTime: formatTime(new Date()) });
+      next.set(studentId, {
+        ...entry,
+        checkOutTime: time,
+        checkedOutBy: employee.name,
+      });
       return next;
     });
+    persist("check-out", entry.student, time);
   }
 
   function pickUpStudent(student: Student) {
-    setPickedUp((prev) => {
-      const next = new Map(prev);
-      next.set(student.id, { student, pickupTime: formatTime(new Date()) });
-      return next;
-    });
+    // The ledger only accepts a pick-up for a student who was checked in
+    // today; if they are still in, it checks them out as well.
+    const checkedOutEntry = checkedOut.get(student.id);
+    const presentEntry = present.get(student.id);
+    if (checkedOutEntry?.pickedUpTime) return;
+    if (!checkedOutEntry && !presentEntry) return;
+    const time = formatTime(new Date());
+
+    const base: CheckedOutEntry = checkedOutEntry ?? {
+      student,
+      checkInTime: presentEntry?.checkInTime ?? time,
+      checkOutTime: time,
+      checkedInBy: presentEntry?.checkedInBy,
+      checkedOutBy: employee.name,
+    };
+
     setPresent((prev) => {
       if (!prev.has(student.id)) return prev;
       const next = new Map(prev);
@@ -295,17 +359,11 @@ export function AttendanceBoard({
       return next;
     });
     setCheckedOut((prev) => {
-      if (!prev.has(student.id)) return prev;
       const next = new Map(prev);
-      next.delete(student.id);
+      next.set(student.id, { ...base, pickedUpTime: time });
       return next;
     });
-    setExcused((prev) => {
-      if (!prev.has(student.id)) return prev;
-      const next = new Map(prev);
-      next.delete(student.id);
-      return next;
-    });
+    persist("pick-up", student, time);
   }
 
   const trimmedQuery = query.trim().toLowerCase();
@@ -381,6 +439,8 @@ export function AttendanceBoard({
   function renderExpandedActions(row: RosterRow) {
     if (expandedStudentId !== row.student.id) return null;
 
+    const canPickUp = row.status === "present" || row.status === "checked-out";
+
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2 border-t pt-2">
         {row.status === "present" ? (
@@ -394,7 +454,7 @@ export function AttendanceBoard({
           >
             Check out
           </Button>
-        ) : (
+        ) : row.status === "picked-up" ? null : (
           <Button
             variant="outline"
             size="sm"
@@ -403,19 +463,21 @@ export function AttendanceBoard({
               checkInStudent(row.student);
             }}
           >
-            Check in
+            {row.status === "checked-out" ? "Check in again" : "Check in"}
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            pickUpStudent(row.student);
-          }}
-        >
-          Pick up
-        </Button>
+        {canPickUp && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              pickUpStudent(row.student);
+            }}
+          >
+            Pick up
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -457,6 +519,7 @@ export function AttendanceBoard({
               {renderName(row)}
               <span className="text-muted-foreground text-xs">
                 Checked in {row.checkInTime}
+                {row.checkedInBy ? ` by ${row.checkedInBy}` : ""}
               </span>
             </div>
             <Button
@@ -485,6 +548,7 @@ export function AttendanceBoard({
           {renderName(row)}
           <span className="text-xs">
             {row.checkInTime} &ndash; {row.checkOutTime}
+            {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
           </span>
           {renderExpandedActions(row)}
         </div>
@@ -499,7 +563,10 @@ export function AttendanceBoard({
           className="flex cursor-pointer flex-col rounded-lg border bg-muted p-3 text-muted-foreground outline-none"
         >
           {renderName(row)}
-          <span className="text-xs">Picked up {row.pickupTime}</span>
+          <span className="text-xs">
+            {row.checkInTime} &ndash; {row.checkOutTime} &middot; Picked up{" "}
+            {row.pickupTime}
+          </span>
           {renderExpandedActions(row)}
         </div>
       );
@@ -594,14 +661,16 @@ export function AttendanceBoard({
 
       <Card>
         <CardContent className="flex flex-col gap-6 pt-6">
-          <div className="relative">
-            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              placeholder="Search students..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Input
+                placeholder="Search students..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
 
           {totalRows === 0 ? (
