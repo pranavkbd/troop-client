@@ -19,10 +19,10 @@ export function PrintQueueLink() {
         "flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium transition-colors hover:bg-muted hover:text-foreground",
         active ? "text-foreground" : "text-muted-foreground",
       )}
-      aria-label={`Print queue, ${count} queued`}
+      aria-label={`Barcodes to print, ${count} queued`}
     >
+      <span className="hidden sm:inline">Barcodes</span>
       <PrinterIcon className="h-4 w-4" />
-      <span className="hidden sm:inline">Print queue</span>
       {count > 0 ? (
         <span className="bg-primary text-primary-foreground flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums">
           {count}

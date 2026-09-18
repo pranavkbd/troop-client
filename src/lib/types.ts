@@ -50,6 +50,8 @@ export interface Barcode {
   voidedAt?: string;
   voidedBy?: string;
   voidReason?: BarcodeVoidReason;
+  /** Free-text context for the replacement, e.g. "left on the bus". */
+  voidNote?: string;
 }
 
 export type EmployeeRole = "Front Desk" | "Instructor" | "Admin";

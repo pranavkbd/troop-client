@@ -2,31 +2,23 @@
 
 import {
   CheckIcon,
-  ChevronRightIcon,
   PrinterIcon,
   RefreshCwIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
-
-import { BarcodeTag } from "@/components/barcode-tag";
+import { BarcodeImage } from "@/components/barcode-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Collapsible,
-  CollapsiblePanel,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -36,18 +28,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import {
   type ReplaceBarcodeState,
   replaceBarcodeAction,
 } from "@/lib/barcode-actions";
 import { usePrintQueue } from "@/lib/print-queue";
 import type { Barcode, BarcodeOwnerKind, BarcodeVoidReason } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-/** Only what the replace form needs; PINs stay on the server. */
-export interface StaffOption {
-  id: string;
-  name: string;
-}
 
 const REASON_LABELS: Record<BarcodeVoidReason, string> = {
   lost: "Lost",
@@ -72,11 +66,9 @@ function formatWhen(iso: string) {
 function ReplaceBarcodeDialog({
   barcode,
   ownerName,
-  staff,
 }: {
   barcode: Barcode;
   ownerName: string;
-  staff: StaffOption[];
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, isPending] = useActionState(
@@ -88,7 +80,16 @@ function ReplaceBarcodeDialog({
     if (state.status === "success") setOpen(false);
   }, [state]);
 
-  const noun = barcode.ownerKind === "student" ? "tag" : "badge";
+  const [signedInEmployeeId, setSignedInEmployeeId] = useState("");
+  useEffect(() => {
+    try {
+      setSignedInEmployeeId(
+        window.localStorage.getItem("troop.signedInEmployeeId") ?? "",
+      );
+    } catch {
+      setSignedInEmployeeId("");
+    }
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -99,12 +100,20 @@ function ReplaceBarcodeDialog({
       <DialogContent>
         <form action={formAction} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>Replace {ownerName}&apos;s barcode</DialogTitle>
-            <DialogDescription>
-              {barcode.value} stops working immediately and a new barcode is
-              issued. Print the new {noun} afterwards.
-            </DialogDescription>
+            <DialogTitle>Replace {ownerName}&apos;s barcode?</DialogTitle>
           </DialogHeader>
+
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex flex-col gap-1">
+              <p>
+                The current barcode{" "}
+                <span className="font-mono font-medium">{barcode.value}</span>{" "}
+                <strong>will stop working</strong> and a new one will be issued.
+              </p>
+              <p>This action cannot be undone.</p>
+            </div>
+          </div>
 
           <input type="hidden" name="barcodeId" value={barcode.id} />
 
@@ -134,35 +143,21 @@ function ReplaceBarcodeDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="replace-employee">Your name</Label>
-            <Select
-              name="employeeId"
-              required
-              items={staff.map((s) => ({ value: s.id, label: s.name }))}
-            >
-              <SelectTrigger id="replace-employee" className="w-full">
-                <SelectValue placeholder="Select your name" />
-              </SelectTrigger>
-              <SelectContent>
-                {staff.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="replace-pin">Your PIN</Label>
-            <Input
-              id="replace-pin"
-              name="pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              required
+            <Label htmlFor="replace-note">
+              Note{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Textarea
+              id="replace-note"
+              name="note"
+              rows={2}
+              maxLength={200}
+              placeholder="e.g. Left on the bus, parent asked for a new one"
             />
           </div>
+          <input type="hidden" name="employeeId" value={signedInEmployeeId} />
 
           {state.status === "error" ? (
             <p className="text-sm text-destructive">{state.message}</p>
@@ -176,8 +171,8 @@ function ReplaceBarcodeDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Replacing…" : "Replace barcode"}
+            <Button type="submit" variant="destructive" disabled={isPending}>
+              {isPending ? "Replacing…" : "Yes, replace it"}
             </Button>
           </DialogFooter>
         </form>
@@ -196,31 +191,31 @@ interface BarcodePanelProps {
   barcode: Barcode;
   /** Previously voided barcodes, newest first. */
   history: Barcode[];
-  staff: StaffOption[];
 }
 
-export function BarcodePanel({
-  owner,
-  barcode,
-  history,
-  staff,
-}: BarcodePanelProps) {
+export function BarcodePanel({ owner, barcode, history }: BarcodePanelProps) {
   const queue = usePrintQueue();
   const queued = queue.has({ kind: owner.kind, id: owner.id });
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <BarcodeTag
-            name={owner.name}
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <BarcodeImage
             value={barcode.value}
-            className="w-fit min-w-72"
+            module={2}
+            height={40}
+            hideLabel
+            className="rounded-md border px-2 py-1.5"
           />
-          <p className="text-muted-foreground text-xs">
-            Issued {formatWhen(barcode.issuedAt)} by {barcode.issuedBy}
-          </p>
+          <div className="flex flex-col">
+            <span className="font-mono text-sm font-medium tracking-wider">
+              {barcode.value}
+            </span>
+            <span className="text-muted-foreground text-xs">
+              Issued {formatWhen(barcode.issuedAt)} by {barcode.issuedBy}
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {queued ? (
@@ -242,50 +237,56 @@ export function BarcodePanel({
               Add to print queue
             </Button>
           )}
-          <ReplaceBarcodeDialog
-            barcode={barcode}
-            ownerName={owner.name}
-            staff={staff}
-          />
+          <ReplaceBarcodeDialog barcode={barcode} ownerName={owner.name} />
         </div>
       </div>
 
       {history.length > 0 ? (
-        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-          <CollapsibleTrigger className="text-muted-foreground flex items-center gap-1 text-xs font-medium hover:text-foreground">
-            <ChevronRightIcon
-              className={cn(
-                "h-3.5 w-3.5 transition-transform",
-                historyOpen && "rotate-90",
-              )}
-            />
-            {history.length} previous barcode{history.length === 1 ? "" : "s"}
-          </CollapsibleTrigger>
-          <CollapsiblePanel>
-            <ul className="mt-2 flex flex-col gap-1 text-sm">
-              {history.map((old) => (
-                <li
-                  key={old.id}
-                  className="text-muted-foreground flex flex-wrap items-center gap-2"
-                >
-                  <span className="font-mono text-xs line-through">
-                    {old.value}
-                  </span>
-                  <span>
-                    {formatWhen(old.issuedAt)} &ndash;{" "}
-                    {old.voidedAt ? formatWhen(old.voidedAt) : "—"}
-                    {old.voidedBy ? ` · by ${old.voidedBy}` : ""}
-                  </span>
-                  {old.voidReason ? (
-                    <Badge variant="outline">
-                      {REASON_LABELS[old.voidReason]}
-                    </Badge>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </CollapsiblePanel>
-        </Collapsible>
+        <div className="flex flex-col gap-2">
+          <h3 className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+            Previous barcodes
+          </h3>
+          <div className="overflow-hidden rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Barcode</TableHead>
+                  <TableHead>Issued</TableHead>
+                  <TableHead>Replaced</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((old) => (
+                  <TableRow key={old.id} className="text-muted-foreground">
+                    <TableCell className="font-mono text-xs line-through">
+                      {old.value}
+                    </TableCell>
+                    <TableCell>{formatWhen(old.issuedAt)}</TableCell>
+                    <TableCell>
+                      {old.voidedAt ? formatWhen(old.voidedAt) : "—"}
+                      {old.voidedBy ? ` by ${old.voidedBy}` : ""}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {old.voidReason ? (
+                          <Badge variant="outline" className="w-fit">
+                            {REASON_LABELS[old.voidReason]}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                        {old.voidNote ? (
+                          <span className="text-xs">{old.voidNote}</span>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       ) : null}
     </div>
   );

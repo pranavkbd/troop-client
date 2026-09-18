@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { BarcodePanel, type StaffOption } from "@/components/barcode-panel";
+import { BarcodePanel } from "@/components/barcode-panel";
 import { ChangePinForm } from "@/components/change-pin-form";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +46,6 @@ export default async function EmployeeDetailPage(
   const barcodeHistory = getBarcodes("employee", employee.id).filter(
     (b) => b.voidedAt,
   );
-  const staff: StaffOption[] = employees.map(({ id, name }) => ({ id, name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,7 +92,6 @@ export default async function EmployeeDetailPage(
               owner={{ kind: "employee", id: employee.id, name: employee.name }}
               barcode={barcode}
               history={barcodeHistory}
-              staff={staff}
             />
           ) : (
             <p className="text-sm text-destructive">

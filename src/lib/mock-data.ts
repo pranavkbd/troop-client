@@ -633,6 +633,7 @@ export function issueBarcode(params: {
 export function replaceBarcode(params: {
   barcodeId: string;
   reason: BarcodeVoidReason;
+  note?: string;
   employeeName: string;
   at: string;
 }): { voided: Barcode; issued: Barcode } {
@@ -646,8 +647,10 @@ export function replaceBarcode(params: {
     current.voidedAt = params.at;
     current.voidedBy = params.employeeName;
     current.voidReason = params.reason;
+    current.voidNote = params.note;
     logBarcodeEvent(current, "Voided Barcode", params.employeeName, params.at, {
       reason: params.reason,
+      note: params.note ?? null,
     });
     const issued = issueBarcode({
       ownerKind: current.ownerKind,

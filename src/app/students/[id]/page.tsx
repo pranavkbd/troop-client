@@ -2,7 +2,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { BarcodePanel, type StaffOption } from "@/components/barcode-panel";
+import { BarcodePanel } from "@/components/barcode-panel";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -24,7 +23,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  employees,
   enrollments,
   getActiveBarcode,
   getActivityLog,
@@ -157,7 +155,6 @@ export default async function StudentDetailPage(
   const barcodeHistory = getBarcodes("student", student.id).filter(
     (b) => b.voidedAt,
   );
-  const staff: StaffOption[] = employees.map(({ id, name }) => ({ id, name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -203,11 +200,6 @@ export default async function StudentDetailPage(
       <Card>
         <CardHeader>
           <CardTitle>Barcode</CardTitle>
-          <CardDescription>
-            Printed on the student's bag tag and scanned at the kiosk. A lost or
-            damaged tag is replaced here; the old barcode stops working the
-            moment the new one is issued.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           {barcode ? (
@@ -219,7 +211,6 @@ export default async function StudentDetailPage(
               }}
               barcode={barcode}
               history={barcodeHistory}
-              staff={staff}
             />
           ) : (
             <p className="text-sm text-destructive">
