@@ -23,11 +23,16 @@ export function PrintQueueLink() {
     >
       <span className="hidden sm:inline">Barcodes</span>
       <PrinterIcon className="h-4 w-4" />
-      {count > 0 ? (
-        <span className="bg-primary text-primary-foreground flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums">
-          {count}
-        </span>
-      ) : null}
+      <span
+        className={cn(
+          "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums transition-colors",
+          count > 0
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        {count}
+      </span>
     </Link>
   );
 }

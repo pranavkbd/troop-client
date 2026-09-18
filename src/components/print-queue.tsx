@@ -1,6 +1,12 @@
 "use client";
 
-import { PrinterIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  GraduationCapIcon,
+  PrinterIcon,
+  Trash2Icon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 
 import { BarcodeTag } from "@/components/barcode-tag";
@@ -15,6 +21,8 @@ export interface PrintablePerson {
   name: string;
   /** Current active barcode value; undefined only if data is inconsistent. */
   barcode?: string;
+  /** Inactive students are skipped by "Add all"; their tags won't be scanned. */
+  inactive?: boolean;
 }
 
 interface PrintQueueProps {
@@ -31,32 +39,65 @@ export function PrintQueue({ people }: PrintQueueProps) {
   });
   const missing = queue.items.length - tiles.length;
 
+  const printable = (kind: BarcodeOwnerKind) =>
+    people.filter((p) => p.kind === kind && p.barcode && !p.inactive);
+  const addAll = (kind: BarcodeOwnerKind) =>
+    queue.add(printable(kind).map(({ kind, id }) => ({ kind, id })));
+  const allStudents = printable("student").length;
+  const allEmployees = printable("employee").length;
+
+  const addAllButtons = (
+    <>
+      <Button variant="outline" onClick={() => addAll("student")}>
+        <GraduationCapIcon />
+        Add all students ({allStudents})
+      </Button>
+      <Button variant="outline" onClick={() => addAll("employee")}>
+        <UsersIcon />
+        Add all employees ({allEmployees})
+      </Button>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Print queue</h1>
-          <p className="text-muted-foreground text-sm">
-            {tiles.length === 0
-              ? "Nothing queued yet."
-              : `${tiles.length} barcode${tiles.length === 1 ? "" : "s"} ready to print, one tag per person. Letter or A4, portrait; cut along the borders.`}
-            {missing > 0
-              ? ` ${missing} queued ${missing === 1 ? "entry" : "entries"} no longer match a person and will be skipped.`
-              : ""}
-          </p>
-        </div>
-        {tiles.length > 0 ? (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={queue.clear}>
-              <Trash2Icon />
-              Clear queue
-            </Button>
-            <Button onClick={() => window.print()}>
-              <PrinterIcon />
-              Print {tiles.length}
-            </Button>
+      <div className="flex flex-wrap items-end justify-between gap-4 print:hidden">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Print queue
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              {tiles.length === 0
+                ? "Nothing queued yet."
+                : `${tiles.length} barcode${tiles.length === 1 ? "" : "s"} ready to print, one tag per person. Letter or A4, portrait; cut along the borders.`}
+              {missing > 0
+                ? ` ${missing} queued ${missing === 1 ? "entry" : "entries"} no longer match a person and will be skipped.`
+                : ""}
+            </p>
           </div>
-        ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {addAllButtons}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={queue.clear}
+            disabled={tiles.length === 0}
+          >
+            <Trash2Icon />
+            Clear queue
+          </Button>
+          <Button
+            onClick={() => window.print()}
+            disabled={tiles.length === 0}
+            className="min-w-28"
+          >
+            <PrinterIcon />
+            {tiles.length === 0 ? "Print" : `Print ${tiles.length}`}
+          </Button>
+        </div>
       </div>
 
       {tiles.length === 0 ? (
@@ -71,7 +112,8 @@ export function PrintQueue({ people }: PrintQueueProps) {
             <Link href="/employees" className="underline underline-offset-4">
               employee
             </Link>{" "}
-            page, or select several rows in those lists.
+            page, select several rows in those lists, or add everyone at once
+            with the buttons above.
           </p>
         </div>
       ) : (

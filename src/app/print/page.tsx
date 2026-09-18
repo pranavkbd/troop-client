@@ -16,6 +16,7 @@ export default function PrintPage() {
       id: s.id,
       name: `${s.firstName} ${s.lastName}`,
       barcode: studentValues[s.id],
+      inactive: s.status === "inactive",
     })),
     ...employees.map((e) => ({
       kind: "employee" as const,
