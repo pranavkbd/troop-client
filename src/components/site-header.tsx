@@ -11,7 +11,8 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/students", label: "Students" },
   { href: "/employees", label: "Employees" },
-  { href: "/attendance", label: "Attendance" },
+  { href: "/attendance", label: "attendance-click-expand" },
+  { href: "/attendance-v2", label: "attendance-v2" },
   { href: "/kiosk", label: "Kiosk" },
 ];
 
@@ -33,7 +34,8 @@ export function SiteHeader() {
             const isActive =
               link.href === "/"
                 ? pathname === "/"
-                : pathname.startsWith(link.href);
+                : pathname === link.href ||
+                  pathname.startsWith(`${link.href}/`);
 
             return (
               <Link
