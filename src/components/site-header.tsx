@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PrintQueueLink } from "@/components/print-queue-link";
 import { TroopMark } from "@/components/troop-mark";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/students", label: "Students" },
+  { href: "/employees", label: "Employees" },
   { href: "/attendance", label: "Attendance" },
+  { href: "/kiosk", label: "Kiosk" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b bg-card">
+    <header className="border-b bg-card print:hidden">
       <div className="mx-auto grid h-14 max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-6 px-6">
         <Link href="/" className="flex items-center gap-0">
           <TroopMark className="text-primary h-4 w-6" />
@@ -47,7 +50,9 @@ export function SiteHeader() {
           })}
         </nav>
 
-        <div />
+        <div className="flex justify-end">
+          <PrintQueueLink />
+        </div>
       </div>
     </header>
   );

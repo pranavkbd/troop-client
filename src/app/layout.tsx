@@ -3,6 +3,7 @@ import { DM_Sans, IBM_Plex_Mono, Lora } from "next/font/google";
 import "./globals.css";
 
 import { SiteHeader } from "@/components/site-header";
+import { Toaster } from "@/components/ui/sonner";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -33,9 +34,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <SiteHeader />
-        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8">
+        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8 print:max-w-none print:p-0">
           {children}
         </main>
+        <Toaster position="bottom-center" />
       </body>
     </html>
   );
