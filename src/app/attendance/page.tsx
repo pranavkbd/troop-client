@@ -6,12 +6,20 @@ import { EmployeeAuthGate } from "@/components/employee-auth";
 import {
   employees,
   enrollments,
+  getActivityLog,
   getAttendanceRecords,
   students,
 } from "@/lib/mock-data";
 
-const DEFAULT_DATE = "2026-08-25";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export default async function AttendancePage(props: PageProps<"/attendance">) {
   const searchParams = await props.searchParams;
@@ -19,7 +27,7 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
   const selectedDate =
     typeof rawDate === "string" && DATE_PATTERN.test(rawDate)
       ? rawDate
-      : DEFAULT_DATE;
+      : todayLocal();
   const selectedDateObj = new Date(`${selectedDate}T00:00:00`);
 
   const selectedDayOfWeek = new Intl.DateTimeFormat("en-US", {
@@ -43,6 +51,20 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
       record.date === selectedDate &&
       (record.status === "present" || record.status === "late"),
   );
+
+  // Who did it, from the ledger: the latest check-in / check-out event
+  // per record. The log is newest-first, so the first hit wins.
+  const checkedInBy = new Map<string, string>();
+  const checkedOutBy = new Map<string, string>();
+  for (const entry of getActivityLog()) {
+    const recordId = entry.metadata.attendanceRecordId;
+    if (typeof recordId !== "string") continue;
+    if (entry.action === "Checked In" && !checkedInBy.has(recordId)) {
+      checkedInBy.set(recordId, entry.employeeName);
+    } else if (entry.action === "Checked Out" && !checkedOutBy.has(recordId)) {
+      checkedOutBy.set(recordId, entry.employeeName);
+    }
+  }
 
   const initialExcusedStudents: ExcusedEntry[] = students.flatMap(
     (student): ExcusedEntry[] => {
@@ -77,7 +99,15 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
     const record = todaysRecords.find(
       (r) => r.studentId === student.id && !r.checkOutTime,
     );
-    return record ? [{ student, checkInTime: record.checkInTime ?? "—" }] : [];
+    return record
+      ? [
+          {
+            student,
+            checkInTime: record.checkInTime ?? "—",
+            checkedInBy: checkedInBy.get(record.id),
+          },
+        ]
+      : [];
   });
 
   const initialCheckedOutStudents = students.flatMap((student) => {
@@ -91,6 +121,8 @@ export default async function AttendancePage(props: PageProps<"/attendance">) {
             checkInTime: record.checkInTime ?? "—",
             checkOutTime: record.checkOutTime ?? "—",
             pickedUpTime: record.pickedUpTime,
+            checkedInBy: checkedInBy.get(record.id),
+            checkedOutBy: checkedOutBy.get(record.id),
           },
         ]
       : [];

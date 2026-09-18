@@ -2,18 +2,66 @@ import type { Employee, Student } from "@/lib/types";
 
 /**
  * Barcode payloads are prefixed so a scan station can tell which kind of
- * badge it just read: students are "S" + student ID, employees are "E" +
- * a zero-padded sequence number.
+ * badge it just read, and end in a check digit so a misread or a typo is
+ * caught by the app itself, independent of the scanner or the symbology:
+ *
+ *   students   "S" + 7-digit student ID + check digit   e.g. S10000015
+ *   employees  "E" + 5-digit sequence  + check digit   e.g. E000012
  */
 export const STUDENT_BARCODE_PREFIX = "S";
 export const EMPLOYEE_BARCODE_PREFIX = "E";
 
+const STUDENT_BODY = /^S(\d{7})(\d)$/;
+const EMPLOYEE_BODY = /^E(\d{5})(\d)$/;
+
+// ---------------------------------------------------------------------------
+// Check digit — Luhn over the code with letters mapped to two digits
+// (A=10 … Z=35), the same extension ISO 7812 uses for alphanumeric IDs. It
+// catches every single-digit error and nearly every adjacent transposition.
+// ---------------------------------------------------------------------------
+
+function digitize(payload: string): string {
+  let out = "";
+  for (const ch of payload) {
+    if (/\d/.test(ch)) out += ch;
+    else out += String(ch.toUpperCase().charCodeAt(0) - 55);
+  }
+  return out;
+}
+
+export function luhnCheckDigit(payload: string): string {
+  const digits = digitize(payload);
+  let sum = 0;
+  let double = true; // the check digit itself will occupy the rightmost slot
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = Number(digits[i]);
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    double = !double;
+  }
+  return String((10 - (sum % 10)) % 10);
+}
+
+export function withCheckDigit(payload: string): string {
+  return `${payload}${luhnCheckDigit(payload)}`;
+}
+
+export function hasValidCheckDigit(code: string): boolean {
+  if (code.length < 2) return false;
+  return luhnCheckDigit(code.slice(0, -1)) === code.slice(-1);
+}
+
 export function studentBarcode(studentId: string): string {
-  return `${STUDENT_BARCODE_PREFIX}${studentId}`;
+  return withCheckDigit(`${STUDENT_BARCODE_PREFIX}${studentId}`);
 }
 
 export function employeeBarcode(sequence: number): string {
-  return `${EMPLOYEE_BARCODE_PREFIX}${String(sequence).padStart(5, "0")}`;
+  return withCheckDigit(
+    `${EMPLOYEE_BARCODE_PREFIX}${String(sequence).padStart(5, "0")}`,
+  );
 }
 
 /** Trims whitespace and upper-cases, so hand-typed codes match printed ones. */
@@ -21,31 +69,67 @@ export function normalizeBarcode(raw: string): string {
   return raw.trim().toUpperCase();
 }
 
-/**
- * Resolves a scanned value to a student. Accepts the printed barcode or, as a
- * fallback for staff typing at a keyboard, the bare student ID.
- */
+// ---------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------
+
+export type ParsedBarcode =
+  | { ok: true; kind: "student"; code: string; studentId: string }
+  | { ok: true; kind: "employee"; code: string }
+  | {
+      ok: false;
+      code: string;
+      /** "check": right shape, wrong check digit — almost always a misread. */
+      reason: "format" | "check";
+      kind?: "student" | "employee";
+    };
+
+export function parseBarcode(raw: string): ParsedBarcode {
+  const code = normalizeBarcode(raw);
+  const student = STUDENT_BODY.exec(code);
+  if (student) {
+    return hasValidCheckDigit(code)
+      ? { ok: true, kind: "student", code, studentId: student[1] }
+      : { ok: false, code, reason: "check", kind: "student" };
+  }
+  const employee = EMPLOYEE_BODY.exec(code);
+  if (employee) {
+    return hasValidCheckDigit(code)
+      ? { ok: true, kind: "employee", code }
+      : { ok: false, code, reason: "check", kind: "employee" };
+  }
+  return { ok: false, code, reason: "format" };
+}
+
+/** Human-readable reason a code was rejected, or null if it parsed. */
+export function barcodeProblem(raw: string): string | null {
+  const parsed = parseBarcode(raw);
+  if (parsed.ok) return null;
+  if (parsed.reason === "check") {
+    return `Check digit doesn't match (read "${parsed.code}"). Likely a misread; scan again.`;
+  }
+  return `Not a Troop barcode (read "${parsed.code}").`;
+}
+
 export function findStudentByBarcode(
   students: readonly Student[],
   raw: string,
 ): Student | undefined {
-  const code = normalizeBarcode(raw);
-  if (!code) return undefined;
-  return (
-    students.find((student) => student.barcode === code) ??
-    students.find((student) => student.id === code)
-  );
+  const parsed = parseBarcode(raw);
+  if (!parsed.ok || parsed.kind !== "student") return undefined;
+  return students.find((student) => student.barcode === parsed.code);
 }
 
 export function findEmployeeByBarcode<T extends Pick<Employee, "barcode">>(
   employees: readonly T[],
   raw: string,
 ): T | undefined {
-  const code = normalizeBarcode(raw);
-  if (!code) return undefined;
-  return employees.find((employee) => employee.barcode === code);
+  const parsed = parseBarcode(raw);
+  if (!parsed.ok || parsed.kind !== "employee") return undefined;
+  return employees.find((employee) => employee.barcode === parsed.code);
 }
 
+/** Shape checks that ignore the check digit, for "wrong kind of badge" hints. */
 export function looksLikeStudentBarcode(raw: string): boolean {
   return /^S\d+$/.test(normalizeBarcode(raw));
 }
@@ -54,100 +138,218 @@ export function looksLikeEmployeeBarcode(raw: string): boolean {
   return /^E\d+$/.test(normalizeBarcode(raw));
 }
 
+/** A code that is the right length to submit, whether or not it validates. */
+export const COMPLETE_BARCODE = /^(?:E\d{6}|S\d{8})$/i;
+
 // ---------------------------------------------------------------------------
-// Code 39 encoding — used to render printable barcodes. Code 39 is read by
-// every commodity USB scanner out of the box, and its symbol set (digits and
-// upper-case letters) covers our "S100001" / "E00001" payloads.
+// Code 128 encoding — used to render printable barcodes. Continuous, dense,
+// and every symbol carries a mandatory modulo-103 checksum, so a damaged
+// label fails to read rather than reading wrong.
 // ---------------------------------------------------------------------------
 
 /**
- * Each symbol is nine elements alternating bar/space, starting with a bar.
- * "1" is wide, "0" is narrow.
+ * Element widths for symbol values 0–106: six alternating bar/space widths
+ * per symbol (eleven modules), plus the thirteen-module stop pattern.
  */
-const CODE39_PATTERNS: Record<string, string> = {
-  "0": "000110100",
-  "1": "100100001",
-  "2": "001100001",
-  "3": "101100000",
-  "4": "000110001",
-  "5": "100110000",
-  "6": "001110000",
-  "7": "000100101",
-  "8": "100100100",
-  "9": "001100100",
-  A: "100001001",
-  B: "001001001",
-  C: "101001000",
-  D: "000011001",
-  E: "100011000",
-  F: "001011000",
-  G: "000001101",
-  H: "100001100",
-  I: "001001100",
-  J: "000011100",
-  K: "100000011",
-  L: "001000011",
-  M: "101000010",
-  N: "000010011",
-  O: "100010010",
-  P: "001010010",
-  Q: "000000111",
-  R: "100000110",
-  S: "001000110",
-  T: "000010110",
-  U: "110000001",
-  V: "011000001",
-  W: "111000000",
-  X: "010010001",
-  Y: "110010000",
-  Z: "011010000",
-  "-": "010000101",
-  ".": "110000100",
-  " ": "011000100",
-  $: "010101000",
-  "/": "010100010",
-  "+": "010001010",
-  "%": "000101010",
-  "*": "010010100",
-};
+const CODE128_PATTERNS = [
+  "212222",
+  "222122",
+  "222221",
+  "121223",
+  "121322",
+  "131222",
+  "122213",
+  "122312",
+  "132212",
+  "221213",
+  "221312",
+  "231212",
+  "112232",
+  "122132",
+  "122231",
+  "113222",
+  "123122",
+  "123221",
+  "223211",
+  "221132",
+  "221231",
+  "213212",
+  "223112",
+  "312131",
+  "311222",
+  "321122",
+  "321221",
+  "312212",
+  "322112",
+  "322211",
+  "212123",
+  "212321",
+  "232121",
+  "111323",
+  "131123",
+  "131321",
+  "112313",
+  "132113",
+  "132311",
+  "211313",
+  "231113",
+  "231311",
+  "112133",
+  "112331",
+  "132131",
+  "113123",
+  "113321",
+  "133121",
+  "313121",
+  "211331",
+  "231131",
+  "213113",
+  "213311",
+  "213131",
+  "311123",
+  "311321",
+  "331121",
+  "312113",
+  "312311",
+  "332111",
+  "314111",
+  "221411",
+  "431111",
+  "111224",
+  "111422",
+  "121124",
+  "121421",
+  "141122",
+  "141221",
+  "112214",
+  "112412",
+  "122114",
+  "122411",
+  "142112",
+  "142211",
+  "241211",
+  "221114",
+  "413111",
+  "241112",
+  "134111",
+  "111242",
+  "121142",
+  "121241",
+  "114212",
+  "124112",
+  "124211",
+  "411212",
+  "421112",
+  "421211",
+  "212141",
+  "214121",
+  "412121",
+  "111143",
+  "111341",
+  "131141",
+  "114113",
+  "114311",
+  "411113",
+  "411311",
+  "113141",
+  "114131",
+  "311141",
+  "411131",
+  "211412",
+  "211214",
+  "211232",
+  "2331112",
+];
 
-export interface Code39Bar {
-  /** X offset in narrow-module units. */
+const START_B = 104;
+const START_C = 105;
+const CODE_C = 99;
+const CODE_B = 100;
+const STOP = 106;
+
+export interface BarcodeBar {
+  /** X offset in modules. */
   x: number;
-  /** Width in narrow-module units (1 = narrow, 3 = wide). */
+  /** Width in modules. */
   width: number;
 }
 
-const WIDE_RATIO = 3;
-
 /**
- * Lays out a Code 39 symbol as a list of bars in module units. Returns null
- * when the value contains a character Code 39 can't encode.
+ * Chooses symbols for the value: code set B for letters, code set C for runs
+ * of digit pairs (two digits per symbol), which is what makes "S10000015"
+ * come out around 110 modules wide.
  */
-export function encodeCode39(
+function code128Symbols(text: string): number[] | null {
+  const symbols: number[] = [];
+  let i = 0;
+  let set: "B" | "C" | null = null;
+
+  const digitRun = (from: number) => {
+    let n = 0;
+    while (from + n < text.length && /\d/.test(text[from + n])) n++;
+    return n;
+  };
+
+  while (i < text.length) {
+    const run = digitRun(i);
+    // Switch to C for runs of four or more digits, or an even run that ends
+    // the value. An odd run spends its first digit in set B so the rest pairs
+    // up cleanly.
+    const wantC = run >= 4 || (run >= 2 && i + run === text.length);
+    if (wantC && run % 2 === 1) {
+      if (set !== "B") {
+        symbols.push(set === null ? START_B : CODE_B);
+        set = "B";
+      }
+      symbols.push(text.charCodeAt(i) - 32);
+      i++;
+      continue;
+    }
+    if (wantC) {
+      if (set !== "C") {
+        symbols.push(set === null ? START_C : CODE_C);
+        set = "C";
+      }
+      const pairs = Math.floor(run / 2);
+      for (let p = 0; p < pairs; p++) {
+        symbols.push(Number(text.slice(i, i + 2)));
+        i += 2;
+      }
+      continue;
+    }
+    if (set !== "B") {
+      symbols.push(set === null ? START_B : CODE_B);
+      set = "B";
+    }
+    const codePoint = text.charCodeAt(i);
+    if (codePoint < 32 || codePoint > 126) return null;
+    symbols.push(codePoint - 32);
+    i++;
+  }
+  return symbols;
+}
+
+export function encodeCode128(
   value: string,
-): { bars: Code39Bar[]; totalWidth: number } | null {
+): { bars: BarcodeBar[]; totalWidth: number } | null {
   const text = normalizeBarcode(value);
   if (!text) return null;
+  const symbols = code128Symbols(text);
+  if (!symbols) return null;
 
-  const symbols = ["*", ...text.split(""), "*"];
-  const bars: Code39Bar[] = [];
+  let checksum = symbols[0];
+  for (let i = 1; i < symbols.length; i++) checksum += symbols[i] * i;
+  symbols.push(checksum % 103, STOP);
+
+  const bars: BarcodeBar[] = [];
   let x = 0;
-
-  for (const [index, symbol] of symbols.entries()) {
-    const pattern = CODE39_PATTERNS[symbol];
-    if (!pattern) return null;
-
-    for (const [position, element] of pattern.split("").entries()) {
-      const width = element === "1" ? WIDE_RATIO : 1;
-      const isBar = position % 2 === 0;
-      if (isBar) bars.push({ x, width });
+  for (const symbol of symbols) {
+    const pattern = CODE128_PATTERNS[symbol];
+    for (const [position, ch] of pattern.split("").entries()) {
+      const width = Number(ch);
+      if (position % 2 === 0) bars.push({ x, width });
       x += width;
     }
-
-    // Inter-character gap (one narrow space) between symbols, not after the last.
-    if (index < symbols.length - 1) x += 1;
   }
-
   return { bars, totalWidth: x };
 }

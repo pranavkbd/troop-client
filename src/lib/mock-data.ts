@@ -39,7 +39,7 @@ function generateStudents(count: number, startNumber: number): StudentSeed[] {
     const subject = faker.helpers.arrayElement(generatedSubjects);
 
     result.push({
-      id: String(100000 + idNumber),
+      id: String(1000000 + idNumber),
       firstName,
       lastName,
       guardianName: `${guardianFirstName} ${lastName}`,
@@ -56,7 +56,7 @@ function generateStudents(count: number, startNumber: number): StudentSeed[] {
 
 const studentSeeds: StudentSeed[] = [
   {
-    id: "100001",
+    id: "1000001",
     firstName: "Ava",
     lastName: "Nguyen",
     guardianName: "Linh Nguyen",
@@ -66,7 +66,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-02-10",
   },
   {
-    id: "100002",
+    id: "1000002",
     firstName: "Ethan",
     lastName: "Cho",
     guardianName: "Michael Cho",
@@ -76,7 +76,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-11-03",
   },
   {
-    id: "100003",
+    id: "1000003",
     firstName: "Sofia",
     lastName: "Ramirez",
     guardianName: "Carla Ramirez",
@@ -86,7 +86,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-05-20",
   },
   {
-    id: "100004",
+    id: "1000004",
     firstName: "Liam",
     lastName: "Patel",
     guardianName: "Priya Patel",
@@ -96,7 +96,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-08-15",
   },
   {
-    id: "100005",
+    id: "1000005",
     firstName: "Mia",
     lastName: "Tanaka",
     guardianName: "Kenji Tanaka",
@@ -106,7 +106,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-01-27",
   },
   {
-    id: "100006",
+    id: "1000006",
     firstName: "Noah",
     lastName: "Kim",
     guardianName: "Grace Kim",
@@ -116,7 +116,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2023-09-05",
   },
   {
-    id: "100007",
+    id: "1000007",
     firstName: "Zoe",
     lastName: "Bianchi",
     guardianName: "Marco Bianchi",
@@ -126,7 +126,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-12-12",
   },
   {
-    id: "100008",
+    id: "1000008",
     firstName: "Oliver",
     lastName: "Singh",
     guardianName: "Ravi Singh",
@@ -136,7 +136,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-04-01",
   },
   {
-    id: "100009",
+    id: "1000009",
     firstName: "Isla",
     lastName: "Fraser",
     guardianName: "Emma Fraser",
@@ -146,7 +146,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-03-14",
   },
   {
-    id: "100010",
+    id: "1000010",
     firstName: "Lucas",
     lastName: "Moreau",
     guardianName: "Julien Moreau",
@@ -156,7 +156,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-09-22",
   },
   {
-    id: "100011",
+    id: "1000011",
     firstName: "Chloe",
     lastName: "Wong",
     guardianName: "Diane Wong",
@@ -166,7 +166,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-06-09",
   },
   {
-    id: "100012",
+    id: "1000012",
     firstName: "Benjamin",
     lastName: "Okafor",
     guardianName: "Ade Okafor",
@@ -176,7 +176,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-10-30",
   },
   {
-    id: "100013",
+    id: "1000013",
     firstName: "Aria",
     lastName: "Petrov",
     guardianName: "Nadia Petrov",
@@ -186,7 +186,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-07-01",
   },
   {
-    id: "100014",
+    id: "1000014",
     firstName: "Mateo",
     lastName: "Silva",
     guardianName: "Renata Silva",
@@ -196,7 +196,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2023-11-18",
   },
   {
-    id: "100015",
+    id: "1000015",
     firstName: "Grace",
     lastName: "Dubois",
     guardianName: "Pierre Dubois",
@@ -206,7 +206,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-01-08",
   },
   {
-    id: "100016",
+    id: "1000016",
     firstName: "Elijah",
     lastName: "Osei",
     guardianName: "Kwame Osei",
@@ -216,7 +216,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-02-24",
   },
   {
-    id: "100017",
+    id: "1000017",
     firstName: "Nora",
     lastName: "Hansen",
     guardianName: "Lars Hansen",
@@ -226,7 +226,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-07-19",
   },
   {
-    id: "100018",
+    id: "1000018",
     firstName: "Julian",
     lastName: "Castillo",
     guardianName: "Rosa Castillo",
@@ -236,7 +236,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2024-05-06",
   },
   {
-    id: "100019",
+    id: "1000019",
     firstName: "Freya",
     lastName: "Lindqvist",
     guardianName: "Erik Lindqvist",
@@ -246,7 +246,7 @@ const studentSeeds: StudentSeed[] = [
     enrolledAt: "2025-08-11",
   },
   {
-    id: "100020",
+    id: "1000020",
     firstName: "Samuel",
     lastName: "Adeyemi",
     guardianName: "Tunde Adeyemi",
@@ -270,7 +270,7 @@ export const students: Student[] = studentSeeds.map((seed) => ({
 const manualEnrollments: Enrollment[] = [
   {
     id: "e1",
-    studentId: "100001",
+    studentId: "1000001",
     subject: "Math",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -280,7 +280,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e2",
-    studentId: "100001",
+    studentId: "1000001",
     subject: "Reading",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -290,7 +290,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e3",
-    studentId: "100002",
+    studentId: "1000002",
     subject: "Math",
     dayOfWeek: "Thu",
     startTime: "16:00",
@@ -300,7 +300,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e4",
-    studentId: "100003",
+    studentId: "1000003",
     subject: "Math",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -310,7 +310,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e5",
-    studentId: "100003",
+    studentId: "1000003",
     subject: "Reading",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -320,7 +320,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e6",
-    studentId: "100005",
+    studentId: "1000005",
     subject: "Math",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -330,7 +330,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e7",
-    studentId: "100005",
+    studentId: "1000005",
     subject: "Reading",
     dayOfWeek: "Tue",
     startTime: "16:00",
@@ -340,7 +340,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e8",
-    studentId: "100007",
+    studentId: "1000007",
     subject: "Math",
     dayOfWeek: "Thu",
     startTime: "16:00",
@@ -350,7 +350,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e9",
-    studentId: "100007",
+    studentId: "1000007",
     subject: "Reading",
     dayOfWeek: "Sat",
     startTime: "10:00",
@@ -360,7 +360,7 @@ const manualEnrollments: Enrollment[] = [
   },
   {
     id: "e10",
-    studentId: "100008",
+    studentId: "1000008",
     subject: "Reading",
     dayOfWeek: "Sat",
     startTime: "10:00",
@@ -537,6 +537,62 @@ export function attendanceRecordId(enrollmentId: string, date: string) {
   return `${enrollmentId}-${date}`;
 }
 
+/** Record id for a session the student wasn't scheduled for. */
+export function walkInRecordId(studentId: string, date: string) {
+  return `walkin-${studentId}-${date}`;
+}
+
+/**
+ * What a write is about: a scheduled slot, or a walk-in for a student who
+ * has no slot that day. Either way the record id is deterministic, so the
+ * same session always lands on the same row.
+ */
+export type SessionRef = { enrollmentId: string } | { walkInStudentId: string };
+
+interface ResolvedSession {
+  recordId: string;
+  studentId: string;
+  enrollment: Enrollment | null;
+}
+
+function resolveSession(ref: SessionRef, date: string): ResolvedSession {
+  if ("enrollmentId" in ref) {
+    const enrollment = enrollments.find((e) => e.id === ref.enrollmentId);
+    if (!enrollment) {
+      throw new Error(`Unknown enrollment ${ref.enrollmentId}`);
+    }
+    return {
+      recordId: attendanceRecordId(enrollment.id, date),
+      studentId: enrollment.studentId,
+      enrollment,
+    };
+  }
+  if (!students.some((s) => s.id === ref.walkInStudentId)) {
+    throw new Error(`Unknown student ${ref.walkInStudentId}`);
+  }
+  return {
+    recordId: walkInRecordId(ref.walkInStudentId, date),
+    studentId: ref.walkInStudentId,
+    enrollment: null,
+  };
+}
+
+function sessionBase(session: ResolvedSession, date: string) {
+  return {
+    studentId: session.studentId,
+    enrollmentId: session.enrollment?.id,
+    date,
+  };
+}
+
+function sessionMetadata(session: ResolvedSession) {
+  return {
+    attendanceRecordId: session.recordId,
+    enrollmentId: session.enrollment?.id ?? null,
+    walkIn: session.enrollment === null,
+  };
+}
+
 const LATE_THRESHOLD_MINUTES = 10;
 
 function minutesLate(scheduledStart: string, checkInTime: string): number {
@@ -545,81 +601,67 @@ function minutesLate(scheduledStart: string, checkInTime: string): number {
   return inHours * 60 + inMinutes - (startHours * 60 + startMinutes);
 }
 
-export function recordCheckIn(params: {
-  enrollmentId: string;
-  date: string;
-  time: string;
-  employeeName: string;
-}): string {
-  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
-  if (!enrollment) {
-    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
-  }
-
-  const recordId = `${params.enrollmentId}-${params.date}`;
+export function recordCheckIn(
+  params: SessionRef & {
+    date: string;
+    time: string;
+    employeeName: string;
+  },
+): string {
+  const session = resolveSession(params, params.date);
+  const { recordId, enrollment } = session;
   const isLate =
+    enrollment !== null &&
     minutesLate(enrollment.startTime, params.time) > LATE_THRESHOLD_MINUTES;
 
   withTransaction(() => {
     appendEvent({
       id: `log-${recordId}-checkin-${activityLogEntries.length}`,
-      studentId: enrollment.studentId,
+      studentId: session.studentId,
       employeeName: params.employeeName,
       action: "Checked In",
       occurredAt: `${params.date}T${params.time}:00`,
       metadata: {
-        attendanceRecordId: recordId,
-        enrollmentId: enrollment.id,
-        room: enrollment.room ?? null,
+        ...sessionMetadata(session),
+        room: enrollment?.room ?? null,
       },
     });
 
-    upsertAttendanceRecord(
-      recordId,
-      {
-        studentId: enrollment.studentId,
-        enrollmentId: enrollment.id,
-        date: params.date,
-      },
-      { status: isLate ? "late" : "present", checkInTime: params.time },
-    );
+    upsertAttendanceRecord(recordId, sessionBase(session, params.date), {
+      status: isLate ? "late" : "present",
+      checkInTime: params.time,
+      // A check-in opens a fresh span. If the student already finished a
+      // session today, the earlier one lives on in the activity log.
+      checkOutTime: undefined,
+    });
   });
 
   return recordId;
 }
 
-export function recordCheckOut(params: {
-  enrollmentId: string;
-  date: string;
-  time: string;
-  employeeName: string;
-}): string {
-  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
-  if (!enrollment) {
-    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
-  }
-
-  const recordId = `${params.enrollmentId}-${params.date}`;
+export function recordCheckOut(
+  params: SessionRef & {
+    date: string;
+    time: string;
+    employeeName: string;
+  },
+): string {
+  const session = resolveSession(params, params.date);
+  const { recordId } = session;
 
   withTransaction(() => {
     appendEvent({
       id: `log-${recordId}-checkout-${activityLogEntries.length}`,
-      studentId: enrollment.studentId,
+      studentId: session.studentId,
       employeeName: params.employeeName,
       action: "Checked Out",
       occurredAt: `${params.date}T${params.time}:00`,
-      metadata: { attendanceRecordId: recordId, enrollmentId: enrollment.id },
+      metadata: sessionMetadata(session),
     });
 
-    upsertAttendanceRecord(
-      recordId,
-      {
-        studentId: enrollment.studentId,
-        enrollmentId: enrollment.id,
-        date: params.date,
-      },
-      { checkOutTime: params.time },
-    );
+    upsertAttendanceRecord(recordId, sessionBase(session, params.date), {
+      checkOutTime: params.time,
+    });
   });
 
   return recordId;
@@ -630,18 +672,15 @@ export function recordCheckOut(params: {
  * pick-up also closes the session: both "Checked Out" and "Picked Up" are
  * logged, because both actually happened.
  */
-export function recordPickUp(params: {
-  enrollmentId: string;
-  date: string;
-  time: string;
-  employeeName: string;
-}): string {
-  const enrollment = enrollments.find((e) => e.id === params.enrollmentId);
-  if (!enrollment) {
-    throw new Error(`Unknown enrollment ${params.enrollmentId}`);
-  }
-
-  const recordId = `${params.enrollmentId}-${params.date}`;
+export function recordPickUp(
+  params: SessionRef & {
+    date: string;
+    time: string;
+    employeeName: string;
+  },
+): string {
+  const session = resolveSession(params, params.date);
+  const { recordId } = session;
   const existing = attendanceRecordsById.get(recordId);
   const needsCheckOut = !existing?.checkOutTime;
 
@@ -649,34 +688,26 @@ export function recordPickUp(params: {
     if (needsCheckOut) {
       appendEvent({
         id: `log-${recordId}-checkout-${activityLogEntries.length}`,
-        studentId: enrollment.studentId,
+        studentId: session.studentId,
         employeeName: params.employeeName,
         action: "Checked Out",
         occurredAt: `${params.date}T${params.time}:00`,
-        metadata: {
-          attendanceRecordId: recordId,
-          enrollmentId: enrollment.id,
-          impliedByPickUp: true,
-        },
+        metadata: { ...sessionMetadata(session), impliedByPickUp: true },
       });
     }
 
     appendEvent({
       id: `log-${recordId}-pickup-${activityLogEntries.length}`,
-      studentId: enrollment.studentId,
+      studentId: session.studentId,
       employeeName: params.employeeName,
       action: "Picked Up",
       occurredAt: `${params.date}T${params.time}:00`,
-      metadata: { attendanceRecordId: recordId, enrollmentId: enrollment.id },
+      metadata: sessionMetadata(session),
     });
 
     upsertAttendanceRecord(
       recordId,
-      {
-        studentId: enrollment.studentId,
-        enrollmentId: enrollment.id,
-        date: params.date,
-      },
+      sessionBase(session, params.date),
       needsCheckOut
         ? { checkOutTime: params.time, pickedUpTime: params.time }
         : { pickedUpTime: params.time },
@@ -1090,7 +1121,7 @@ function seedGeneratedExcusedRecords() {
 
   const candidates = enrollments.filter(
     (enrollment) =>
-      enrollment.dayOfWeek === "Tue" && Number(enrollment.studentId) >= 100021,
+      enrollment.dayOfWeek === "Tue" && Number(enrollment.studentId) >= 1000021,
   );
   const picks = faker.helpers.arrayElements(candidates, 14);
   const [excusedPicks, unknownPicks] = [picks.slice(0, 10), picks.slice(10)];

@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  barcodeProblem,
+  COMPLETE_BARCODE,
   findEmployeeByBarcode,
   looksLikeEmployeeBarcode,
   looksLikeStudentBarcode,
@@ -51,6 +53,7 @@ interface RecentScan {
 
 /** How long a result owns the stage before the badge prompt returns. */
 const FLASH_MS = 2_500;
+
 const RECENT_LIMIT = 6;
 
 const ACTION_ICONS: Record<ScanAction, typeof LogInIcon> = {
@@ -250,15 +253,29 @@ function Stage({ action, phase, flash, error, pending, onScan }: StageProps) {
   const result = flash?.result ?? null;
   const awaitingStudent = phase.kind === "student";
 
+  // Some scanners are configured without an Enter suffix. When the typed
+  // value already looks like a complete code and the keystrokes pause, submit
+  // it anyway. A scanner types a whole code in a few milliseconds, so a short
+  // idle window separates it from a person still typing.
+  const submitRef = useRef<() => void>(() => {});
+  submitRef.current = () => {
+    const code = value.trim();
+    setValue("");
+    if (!code) return;
+    onScan(code);
+  };
+  useEffect(() => {
+    if (!COMPLETE_BARCODE.test(value.trim())) return;
+    const timer = window.setTimeout(() => submitRef.current(), 250);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+
   return (
     <form
       className="relative flex flex-col items-center px-6 pt-8 pb-6"
       onSubmit={(event) => {
         event.preventDefault();
-        const code = value.trim();
-        setValue("");
-        if (!code) return;
-        onScan(code);
+        submitRef.current();
       }}
     >
       {/* Cycle pips: which half of badge → student we're in. */}
@@ -313,16 +330,14 @@ function Stage({ action, phase, flash, error, pending, onScan }: StageProps) {
             <p className="text-sm opacity-80">
               {result.ok
                 ? `${result.time} · by ${result.employeeName}`
-                : [
-                    studentNameOf(result) &&
+                : studentNameOf(result) &&
                     !result.message.includes(studentNameOf(result) ?? "")
-                      ? studentNameOf(result)
-                      : null,
-                    result.detail,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  ? studentNameOf(result)
+                  : null}
             </p>
+            {result.detail ? (
+              <p className="text-sm font-medium">{result.detail}</p>
+            ) : null}
           </output>
         ) : (
           <div
@@ -360,7 +375,7 @@ function Stage({ action, phase, flash, error, pending, onScan }: StageProps) {
         value={value}
         onChange={(event) => setValue(event.target.value)}
         onBlur={refocus}
-        placeholder={awaitingStudent ? "S100000" : "E00000"}
+        placeholder={awaitingStudent ? "S10000000" : "E000000"}
         autoComplete="off"
         autoCapitalize="characters"
         spellCheck={false}
@@ -529,7 +544,10 @@ export function ScanStation({ employees }: ScanStationProps) {
       }
       const employee = findEmployeeByBarcode(employees, code);
       if (!employee) {
-        setError("Employee badge not recognized. Try again.");
+        setError(
+          barcodeProblem(code) ??
+            `Employee badge not recognized (read "${code}"). Try again.`,
+        );
         return;
       }
       setError(null);
@@ -540,6 +558,11 @@ export function ScanStation({ employees }: ScanStationProps) {
 
     if (looksLikeEmployeeBarcode(code)) {
       setError("That's an employee badge. Scan the student's barcode.");
+      return;
+    }
+    const problem = barcodeProblem(code);
+    if (problem) {
+      setError(problem);
       return;
     }
     setError(null);

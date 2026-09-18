@@ -1,27 +1,32 @@
-import { encodeCode39 } from "@/lib/barcode";
+import { encodeCode128 } from "@/lib/barcode";
 import { cn } from "@/lib/utils";
 
 interface BarcodeProps {
   value: string;
-  /** Rendered bar height in pixels. */
+  /** Pixels per narrow element. Camera scanners want 3+ on a screen. */
+  module?: number;
+  /** Bar height in pixels. */
   height?: number;
   className?: string;
-  /** Hide the human-readable text under the bars. */
   hideLabel?: boolean;
 }
 
+/** Code 128 requires at least 10 modules of blank space on each side. */
+const QUIET_ZONE_MODULES = 10;
+
 /**
- * Printable Code 39 barcode. Bars are laid out in narrow-module units and the
- * SVG stretches to its container's width, which keeps the wide/narrow ratio
- * intact at any size.
+ * Printable, scannable Code 128 barcode. Every dimension is an integer number
+ * of device pixels: bars are never stretched, so they render crisp rather than
+ * anti-aliased, which is what a handheld imager needs to read a screen.
  */
 export function Barcode({
   value,
-  height = 56,
+  module = 3,
+  height = 64,
   className,
   hideLabel = false,
 }: BarcodeProps) {
-  const encoded = encodeCode39(value);
+  const encoded = encodeCode128(value);
 
   if (!encoded) {
     return (
@@ -31,31 +36,34 @@ export function Barcode({
     );
   }
 
+  const quiet = QUIET_ZONE_MODULES * module;
+  const width = encoded.totalWidth * module + quiet * 2;
+
   return (
     <figure
       className={cn(
-        "inline-flex flex-col items-center gap-1 rounded-md bg-white px-4 py-3 text-black",
+        "inline-flex flex-col items-center gap-1 rounded-md bg-white px-2 py-2 text-black",
         className,
       )}
     >
       <svg
         role="img"
         aria-label={`Barcode ${value}`}
-        viewBox={`0 0 ${encoded.totalWidth} ${height}`}
-        width={encoded.totalWidth * 2}
+        width={width}
         height={height}
-        preserveAspectRatio="none"
+        viewBox={`0 0 ${width} ${height}`}
         shapeRendering="crispEdges"
-        className="max-w-full"
+        className="block max-w-full"
       >
+        <rect x={0} y={0} width={width} height={height} fill="white" />
         {encoded.bars.map((bar) => (
           <rect
             key={bar.x}
-            x={bar.x}
+            x={quiet + bar.x * module}
             y={0}
-            width={bar.width}
+            width={bar.width * module}
             height={height}
-            fill="currentColor"
+            fill="black"
           />
         ))}
       </svg>

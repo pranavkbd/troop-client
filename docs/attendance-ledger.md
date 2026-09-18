@@ -192,9 +192,10 @@ CREATE INDEX idx_activity_log_meta    ON activity_log USING gin (metadata);
 
 ```sql
 CREATE TABLE attendance_records (
-  id               text PRIMARY KEY,      -- deterministic: enrollment_id || '-' || date
+  id               text PRIMARY KEY,      -- deterministic: enrollment_id || '-' || date,
+                                          -- or 'walkin-' || student_id || '-' || date
   student_id       uuid NOT NULL REFERENCES students(id),
-  enrollment_id    uuid NOT NULL REFERENCES enrollments(id),
+  enrollment_id    uuid REFERENCES enrollments(id), -- NULL for a walk-in (unscheduled) session
   date             date NOT NULL,         -- the business day this session belongs to
   status           text NOT NULL CHECK (status IN ('present','late','absent','excused','unknown')),
   attendance_span  tstzrange,             -- [check-in, check-out) — see note below

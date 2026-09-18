@@ -24,7 +24,7 @@ export interface Student {
   levels: Partial<Record<Subject, string>>;
   status: StudentStatus;
   enrolledAt: string;
-  /** Value encoded on the student's printed barcode, e.g. "S100001". */
+  /** Value encoded on the student's printed barcode, e.g. "S10000015". */
   barcode: string;
 }
 
@@ -72,7 +72,8 @@ export interface ActivityLogEntry {
 export interface AttendanceRecord {
   id: string;
   studentId: string;
-  enrollmentId: string;
+  /** Absent for a walk-in: a session the student wasn't scheduled for. */
+  enrollmentId?: string;
   date: string;
   status: AttendanceStatus;
   checkInTime?: string;

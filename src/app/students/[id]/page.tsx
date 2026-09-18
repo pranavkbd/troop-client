@@ -285,7 +285,15 @@ export default async function StudentDetailPage(
                     {history.length ? (
                       history.map((record) => (
                         <TableRow key={record.id}>
-                          <TableCell>{formatDate(record.date)}</TableCell>
+                          <TableCell>
+                            {formatDate(record.date)}
+                            {record.enrollmentId ? null : (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · Walk-in
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>{record.checkInTime ?? "—"}</TableCell>
                           <TableCell>{record.checkOutTime ?? "—"}</TableCell>
                           <TableCell>{record.pickedUpTime ?? "—"}</TableCell>

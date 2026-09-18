@@ -2,6 +2,7 @@
 
 import { addDays, format, parseISO, subDays } from "date-fns";
 import {
+  BarcodeIcon,
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -9,7 +10,9 @@ import {
   SearchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { Barcode } from "@/components/barcode";
 import { useEmployeeSession } from "@/components/employee-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { recordBoardAttendance } from "@/lib/attendance-actions";
+import type { ScanAction } from "@/lib/scan";
 import type { ExcuseReason, Student } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -130,10 +135,17 @@ function formatTime(date: Date) {
 interface RosterSectionProps {
   title: string;
   rows: RosterRow[];
+  /** Fewer, wider cards so a full-size barcode fits in each. */
+  wide?: boolean;
   renderRosterCard: (row: RosterRow) => React.ReactNode;
 }
 
-function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
+function RosterSection({
+  title,
+  rows,
+  wide = false,
+  renderRosterCard,
+}: RosterSectionProps) {
   const [open, setOpen] = useState(true);
 
   if (rows.length === 0) return null;
@@ -152,7 +164,12 @@ function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
         </span>
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-2 pt-2",
+            wide ? "md:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3",
+          )}
+        >
           {rows.map((row) => renderRosterCard(row))}
         </div>
       </CollapsiblePanel>
@@ -203,6 +220,47 @@ export function AttendanceBoard({
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
   const [query, setQuery] = useState("");
+  const [showBarcodes, setShowBarcodes] = useState(false);
+  const [, startTransition] = useTransition();
+
+  /** Scannable barcode under a name, for testing a scanner against the roster. */
+  function cardBarcode(student: Student) {
+    if (!showBarcodes) return null;
+    return (
+      <Barcode
+        value={student.barcode}
+        module={3}
+        height={48}
+        className="mt-2 w-fit gap-0.5 [&_figcaption]:text-[11px] [&_figcaption]:tracking-[0.25em]"
+      />
+    );
+  }
+
+  /**
+   * Every board click is written to the ledger. The local maps update
+   * optimistically so the card moves at once; if the ledger refuses, the
+   * snapshot taken before the click is restored and the refusal is shown.
+   */
+  function persist(action: ScanAction, student: Student, time: string) {
+    const snapshot = { present, checkedOut, excused };
+    startTransition(async () => {
+      const result = await recordBoardAttendance({
+        action,
+        employeeId: employee.id,
+        studentId: student.id,
+        date: selectedDate,
+        time,
+      });
+      if (result.ok) {
+        if (result.detail) toast.message(result.detail);
+        return;
+      }
+      toast.error(result.message, { description: result.detail });
+      setPresent(snapshot.present);
+      setCheckedOut(snapshot.checkedOut);
+      setExcused(snapshot.excused);
+    });
+  }
 
   const buildRosterRow = useCallback(
     (student: Student): RosterRow => {
@@ -245,13 +303,20 @@ export function AttendanceBoard({
   );
 
   function checkInStudent(student: Student) {
+    const time = formatTime(new Date());
     setPresent((prev) => {
       const next = new Map(prev);
       next.set(student.id, {
         student,
-        checkInTime: formatTime(new Date()),
+        checkInTime: time,
         checkedInBy: employee.name,
       });
+      return next;
+    });
+    setCheckedOut((prev) => {
+      if (!prev.has(student.id)) return prev;
+      const next = new Map(prev);
+      next.delete(student.id);
       return next;
     });
     setExcused((prev) => {
@@ -260,11 +325,13 @@ export function AttendanceBoard({
       next.delete(student.id);
       return next;
     });
+    persist("check-in", student, time);
   }
 
   function checkOutStudent(studentId: string) {
     const entry = present.get(studentId);
     if (!entry) return;
+    const time = formatTime(new Date());
 
     setPresent((prev) => {
       const next = new Map(prev);
@@ -275,11 +342,12 @@ export function AttendanceBoard({
       const next = new Map(prev);
       next.set(studentId, {
         ...entry,
-        checkOutTime: formatTime(new Date()),
+        checkOutTime: time,
         checkedOutBy: employee.name,
       });
       return next;
     });
+    persist("check-out", entry.student, time);
   }
 
   const trimmedQuery = query.trim().toLowerCase();
@@ -356,6 +424,7 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
+            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               Checked in {row.checkInTime}
               {row.checkedInBy ? ` by ${row.checkedInBy}` : ""}
@@ -376,18 +445,32 @@ export function AttendanceBoard({
       return (
         <div
           key={row.student.id}
-          className="flex flex-col rounded-lg border bg-muted p-3 text-muted-foreground"
+          className="flex items-center justify-between gap-2 rounded-lg border bg-muted p-3 text-muted-foreground"
         >
-          <span className="flex items-center gap-1.5 text-sm font-medium">
-            {scheduledIds.has(row.student.id) && <ExpectedDot />}
-            {row.student.firstName} {row.student.lastName}
-            <EnrollmentStatusBadge status={row.student.status} />
-          </span>
-          <span className="text-xs">
-            {row.checkInTime} &ndash; {row.checkOutTime}
-            {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
-            {row.pickedUpTime ? ` · Picked up ${row.pickedUpTime}` : ""}
-          </span>
+          <div className="flex flex-col">
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              {scheduledIds.has(row.student.id) && <ExpectedDot />}
+              {row.student.firstName} {row.student.lastName}
+              <EnrollmentStatusBadge status={row.student.status} />
+            </span>
+            {cardBarcode(row.student)}
+            <span className="text-xs">
+              {row.checkInTime} &ndash; {row.checkOutTime}
+              {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
+              {row.pickedUpTime ? ` · Picked up ${row.pickedUpTime}` : ""}
+            </span>
+          </div>
+          {row.pickedUpTime ? null : (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              title="Check in again"
+              onClick={() => checkInStudent(row.student)}
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              <span className="sr-only">Check in again</span>
+            </Button>
+          )}
         </div>
       );
     }
@@ -404,6 +487,7 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
+            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               {excuseReasonLabels[row.reason]}
               {row.notes ? ` — ${row.notes}` : ""}
@@ -433,6 +517,7 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
+            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               No show{row.notes ? ` — ${row.notes}` : ""}
             </span>
@@ -454,11 +539,14 @@ export function AttendanceBoard({
         key={row.student.id}
         className="flex items-center justify-between gap-2 rounded-lg border bg-card p-3"
       >
-        <span className="flex items-center gap-1.5 text-sm font-medium">
-          {scheduledIds.has(row.student.id) && <ExpectedDot />}
-          {row.student.firstName} {row.student.lastName}
-          <EnrollmentStatusBadge status={row.student.status} />
-        </span>
+        <div className="flex flex-col">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            {scheduledIds.has(row.student.id) && <ExpectedDot />}
+            {row.student.firstName} {row.student.lastName}
+            <EnrollmentStatusBadge status={row.student.status} />
+          </span>
+          {cardBarcode(row.student)}
+        </div>
         <Button
           variant="ghost"
           size="icon-xs"
@@ -515,14 +603,24 @@ export function AttendanceBoard({
 
       <Card>
         <CardContent className="flex flex-col gap-6 pt-6">
-          <div className="relative">
-            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              placeholder="Search students..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Input
+                placeholder="Search students..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant={showBarcodes ? "secondary" : "outline"}
+              aria-pressed={showBarcodes}
+              onClick={() => setShowBarcodes((value) => !value)}
+            >
+              <BarcodeIcon />
+              Barcodes
+            </Button>
           </div>
 
           {totalRows === 0 ? (
@@ -534,21 +632,25 @@ export function AttendanceBoard({
               <RosterSection
                 title="Checked In"
                 rows={checkedInRows}
+                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Scheduled Today"
                 rows={scheduledRows}
+                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Active"
                 rows={activeRows}
+                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Inactive"
                 rows={inactiveRows}
+                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
             </>
