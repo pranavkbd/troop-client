@@ -19,7 +19,12 @@ export default function StudentsPage() {
         <CardDescription>{students.length} students enrolled.</CardDescription>
       </CardHeader>
       <CardContent>
-        <DataTable columns={columns} data={students} rowHrefBase="/students" />
+        <DataTable
+          columns={columns}
+          data={students}
+          rowHrefBase="/students"
+          printQueueKind="student"
+        />
       </CardContent>
     </Card>
   );

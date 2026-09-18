@@ -1,7 +1,7 @@
 import { encodeCode128 } from "@/lib/barcode";
 import { cn } from "@/lib/utils";
 
-interface BarcodeProps {
+interface BarcodeImageProps {
   value: string;
   /** Pixels per narrow element. Camera scanners want 3+ on a screen. */
   module?: number;
@@ -19,13 +19,13 @@ const QUIET_ZONE_MODULES = 10;
  * of device pixels: bars are never stretched, so they render crisp rather than
  * anti-aliased, which is what a handheld imager needs to read a screen.
  */
-export function Barcode({
+export function BarcodeImage({
   value,
   module = 3,
   height = 64,
   className,
   hideLabel = false,
-}: BarcodeProps) {
+}: BarcodeImageProps) {
   const encoded = encodeCode128(value);
 
   if (!encoded) {

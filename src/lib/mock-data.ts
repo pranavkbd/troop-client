@@ -1,10 +1,13 @@
 import { faker } from "@faker-js/faker";
 
-import { employeeBarcode, studentBarcode } from "@/lib/barcode";
+import { barcodeValue } from "@/lib/barcode";
 import type {
   ActivityLogEntry,
   AttendanceRecord,
   AttendanceStatus,
+  Barcode,
+  BarcodeOwnerKind,
+  BarcodeVoidReason,
   DayOfWeek,
   Employee,
   Enrollment,
@@ -25,7 +28,7 @@ const generatedStatuses: Student["status"][] = [
   "inactive",
 ];
 
-type StudentSeed = Omit<Student, "barcode">;
+type StudentSeed = Student;
 
 function generateStudents(count: number, startNumber: number): StudentSeed[] {
   faker.seed(1234);
@@ -258,10 +261,7 @@ const studentSeeds: StudentSeed[] = [
   ...generateStudents(180, 21),
 ];
 
-export const students: Student[] = studentSeeds.map((seed) => ({
-  ...seed,
-  barcode: studentBarcode(seed.id),
-}));
+export const students: Student[] = studentSeeds;
 
 // Manually-curated schedule slots for the narrative students, inlined from
 // what used to be the shared `sess1`..`sess4` catalog so the seeded story
@@ -460,19 +460,14 @@ const excuseNotesByReason: Record<ExcuseReason, string> = {
   other: "Excused by guardian",
 };
 
-export const employees: Employee[] = (
-  [
-    { id: "emp-1", name: "Front Desk", pin: "1234", role: "Front Desk" },
-    { id: "emp-2", name: "Ms. Delgado", pin: "2468", role: "Instructor" },
-    { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
-    { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
-    { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
-    { id: "emp-6", name: "Ms. Whitfield", pin: "4321", role: "Admin" },
-  ] satisfies Omit<Employee, "barcode">[]
-).map((employee, index) => ({
-  ...employee,
-  barcode: employeeBarcode(index + 1),
-}));
+export const employees: Employee[] = [
+  { id: "emp-1", name: "Front Desk", pin: "1234", role: "Front Desk" },
+  { id: "emp-2", name: "Ms. Delgado", pin: "2468", role: "Instructor" },
+  { id: "emp-3", name: "Mr. Nakamura", pin: "1357", role: "Instructor" },
+  { id: "emp-4", name: "Ms. Carter", pin: "9081", role: "Instructor" },
+  { id: "emp-5", name: "Mr. Alvarez", pin: "5150", role: "Instructor" },
+  { id: "emp-6", name: "Ms. Whitfield", pin: "4321", role: "Admin" },
+];
 
 const FRONT_DESK_STAFF = employees.map((employee) => employee.name);
 
@@ -491,6 +486,8 @@ const attendanceRecordsById = new Map<string, AttendanceRecord>();
 function withTransaction<T>(fn: () => T): T {
   const logSnapshot = [...activityLogEntries];
   const recordsSnapshot = new Map(attendanceRecordsById);
+  const barcodesSnapshot = barcodes.map((barcode) => ({ ...barcode }));
+  const serialSnapshot = { ...nextSerial };
   try {
     return fn();
   } catch (error) {
@@ -500,8 +497,166 @@ function withTransaction<T>(fn: () => T): T {
     for (const [id, record] of recordsSnapshot) {
       attendanceRecordsById.set(id, record);
     }
+    barcodes.length = 0;
+    barcodes.push(...barcodesSnapshot);
+    nextSerial.student = serialSnapshot.student;
+    nextSerial.employee = serialSnapshot.employee;
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Barcodes
+//
+// Every student and employee owns exactly one active barcode. Serials come
+// from their own sequences so they never look like person IDs. Issuing and
+// voiding a student's barcode are ledger events like any other.
+// ---------------------------------------------------------------------------
+
+const barcodes: Barcode[] = [];
+const nextSerial: Record<BarcodeOwnerKind, number> = {
+  student: 5000001,
+  employee: 10001,
+};
+
+export function getBarcodes(
+  ownerKind?: BarcodeOwnerKind,
+  ownerId?: string,
+): Barcode[] {
+  return barcodes
+    .filter(
+      (barcode) =>
+        (ownerKind === undefined || barcode.ownerKind === ownerKind) &&
+        (ownerId === undefined || barcode.ownerId === ownerId),
+    )
+    .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+}
+
+export function getActiveBarcode(
+  ownerKind: BarcodeOwnerKind,
+  ownerId: string,
+): Barcode | undefined {
+  return barcodes.find(
+    (barcode) =>
+      barcode.ownerKind === ownerKind &&
+      barcode.ownerId === ownerId &&
+      !barcode.voidedAt,
+  );
+}
+
+export function getBarcodeByValue(value: string): Barcode | undefined {
+  return barcodes.find((barcode) => barcode.value === value);
+}
+
+/** Active barcode value per owner ID, for screens that list people. */
+export function getActiveBarcodeValues(
+  ownerKind: BarcodeOwnerKind,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const barcode of barcodes) {
+    if (barcode.ownerKind === ownerKind && !barcode.voidedAt) {
+      out[barcode.ownerId] = barcode.value;
+    }
+  }
+  return out;
+}
+
+function assertOwnerExists(ownerKind: BarcodeOwnerKind, ownerId: string) {
+  const exists =
+    ownerKind === "student"
+      ? students.some((s) => s.id === ownerId)
+      : employees.some((e) => e.id === ownerId);
+  if (!exists) throw new Error(`Unknown ${ownerKind} ${ownerId}`);
+}
+
+/** Student barcode events go in the student's ledger; staff badges don't have one. */
+function logBarcodeEvent(
+  barcode: Barcode,
+  action: "Issued Barcode" | "Voided Barcode",
+  employeeName: string,
+  occurredAt: string,
+  extra: Record<string, unknown> = {},
+) {
+  if (barcode.ownerKind !== "student") return;
+  appendEvent({
+    id: `log-barcode-${barcode.id}-${action === "Issued Barcode" ? "issued" : "voided"}`,
+    studentId: barcode.ownerId,
+    employeeName,
+    action,
+    occurredAt,
+    metadata: { barcodeId: barcode.id, value: barcode.value, ...extra },
+  });
+}
+
+/**
+ * Issues a barcode to a person who has none active. Called when a person is
+ * created and, via replaceBarcode, when a tag is lost or damaged.
+ */
+export function issueBarcode(params: {
+  ownerKind: BarcodeOwnerKind;
+  ownerId: string;
+  employeeName: string;
+  issuedAt: string;
+}): Barcode {
+  assertOwnerExists(params.ownerKind, params.ownerId);
+  if (getActiveBarcode(params.ownerKind, params.ownerId)) {
+    throw new Error(
+      `${params.ownerKind} ${params.ownerId} already has an active barcode`,
+    );
+  }
+
+  return withTransaction(() => {
+    const serial = String(nextSerial[params.ownerKind]++);
+    const barcode: Barcode = {
+      id: serial,
+      ownerKind: params.ownerKind,
+      ownerId: params.ownerId,
+      value: barcodeValue(params.ownerKind, serial),
+      issuedAt: params.issuedAt,
+      issuedBy: params.employeeName,
+    };
+    barcodes.push(barcode);
+    logBarcodeEvent(
+      barcode,
+      "Issued Barcode",
+      params.employeeName,
+      params.issuedAt,
+    );
+    return barcode;
+  });
+}
+
+/**
+ * The one lifecycle action: void the current barcode and issue the next in a
+ * single transaction, so the owner is never left without one.
+ */
+export function replaceBarcode(params: {
+  barcodeId: string;
+  reason: BarcodeVoidReason;
+  employeeName: string;
+  at: string;
+}): { voided: Barcode; issued: Barcode } {
+  const current = barcodes.find((b) => b.id === params.barcodeId);
+  if (!current) throw new Error(`Unknown barcode ${params.barcodeId}`);
+  if (current.voidedAt) {
+    throw new Error(`Barcode ${current.value} is already void`);
+  }
+
+  return withTransaction(() => {
+    current.voidedAt = params.at;
+    current.voidedBy = params.employeeName;
+    current.voidReason = params.reason;
+    logBarcodeEvent(current, "Voided Barcode", params.employeeName, params.at, {
+      reason: params.reason,
+    });
+    const issued = issueBarcode({
+      ownerKind: current.ownerKind,
+      ownerId: current.ownerId,
+      employeeName: params.employeeName,
+      issuedAt: params.at,
+    });
+    return { voided: current, issued };
+  });
 }
 
 function appendEvent(entry: ActivityLogEntry) {
@@ -1205,6 +1360,37 @@ function seedEditsAndVoids() {
   });
 }
 
+function seedBarcodes() {
+  // Everyone got a barcode when they joined.
+  for (const student of students) {
+    issueBarcode({
+      ownerKind: "student",
+      ownerId: student.id,
+      employeeName: "Front Desk",
+      issuedAt: `${student.enrolledAt}T10:00:00`,
+    });
+  }
+  for (const employee of employees) {
+    issueBarcode({
+      ownerKind: "employee",
+      ownerId: employee.id,
+      employeeName: "Ms. Whitfield",
+      issuedAt: "2025-01-06T09:00:00",
+    });
+  }
+  // Ava lost hers over the summer and was reissued.
+  const avaCurrent = getActiveBarcode("student", "1000001");
+  if (avaCurrent) {
+    replaceBarcode({
+      barcodeId: avaCurrent.id,
+      reason: "lost",
+      employeeName: "Front Desk",
+      at: "2026-08-20T16:05:00",
+    });
+  }
+}
+
+seedBarcodes();
 seedNarrativeAttendance();
 seedGeneratedExcusedRecords();
 seedEditsAndVoids();

@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Barcode } from "@/components/barcode";
+import { BarcodePanel, type StaffOption } from "@/components/barcode-panel";
 import { ChangePinForm } from "@/components/change-pin-form";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { employees } from "@/lib/mock-data";
+import { employees, getActiveBarcode, getBarcodes } from "@/lib/mock-data";
 import type { EmployeeRole } from "@/lib/types";
 
 const roleVariant: Record<EmployeeRole, "default" | "secondary"> = {
@@ -42,6 +42,11 @@ export default async function EmployeeDetailPage(
   }
 
   const admins = employees.filter((e) => e.role === "Admin");
+  const barcode = getActiveBarcode("employee", employee.id);
+  const barcodeHistory = getBarcodes("employee", employee.id).filter(
+    (b) => b.voidedAt,
+  );
+  const staff: StaffOption[] = employees.map(({ id, name }) => ({ id, name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,14 +81,25 @@ export default async function EmployeeDetailPage(
 
       <Card>
         <CardHeader>
-          <CardTitle>Badge barcode</CardTitle>
+          <CardTitle>Barcode</CardTitle>
           <CardDescription>
-            Scanned at the Scan Station to identify who recorded an attendance
-            action.
+            Scanned at the kiosk before each student so every action is
+            attributed to the right person.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Barcode value={employee.barcode} />
+          {barcode ? (
+            <BarcodePanel
+              owner={{ kind: "employee", id: employee.id, name: employee.name }}
+              barcode={barcode}
+              history={barcodeHistory}
+              staff={staff}
+            />
+          ) : (
+            <p className="text-sm text-destructive">
+              This employee has no active barcode, which shouldn't happen.
+            </p>
+          )}
         </CardContent>
       </Card>
 

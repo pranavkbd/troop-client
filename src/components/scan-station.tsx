@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import {
   barcodeProblem,
   COMPLETE_BARCODE,
-  findEmployeeByBarcode,
+  findByBarcode,
   looksLikeEmployeeBarcode,
   looksLikeStudentBarcode,
 } from "@/lib/barcode";
@@ -41,7 +41,10 @@ import type { Employee } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Only what the station needs; PINs never leave the server for this page. */
-export type ScanEmployee = Pick<Employee, "id" | "name" | "barcode">;
+export type ScanEmployee = Pick<Employee, "id" | "name"> & {
+  /** The employee's active barcode value. */
+  barcode: string;
+};
 
 /** Where we are inside one badge → student cycle. */
 type Phase = { kind: "badge" } | { kind: "student"; employee: ScanEmployee };
@@ -542,7 +545,7 @@ export function ScanStation({ employees }: ScanStationProps) {
         setError("That's a student barcode. Scan your employee badge first.");
         return;
       }
-      const employee = findEmployeeByBarcode(employees, code);
+      const employee = findByBarcode(employees, code);
       if (!employee) {
         setError(
           barcodeProblem(code) ??
@@ -593,7 +596,7 @@ export function ScanStation({ employees }: ScanStationProps) {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Scan Station</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Kiosk</h1>
         {mode ? (
           <Button variant="ghost" size="sm" onClick={leaveMode}>
             Change mode

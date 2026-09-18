@@ -2,7 +2,6 @@
 
 import { addDays, format, parseISO, subDays } from "date-fns";
 import {
-  BarcodeIcon,
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -12,7 +11,6 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Barcode } from "@/components/barcode";
 import { useEmployeeSession } from "@/components/employee-auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -135,17 +133,10 @@ function formatTime(date: Date) {
 interface RosterSectionProps {
   title: string;
   rows: RosterRow[];
-  /** Fewer, wider cards so a full-size barcode fits in each. */
-  wide?: boolean;
   renderRosterCard: (row: RosterRow) => React.ReactNode;
 }
 
-function RosterSection({
-  title,
-  rows,
-  wide = false,
-  renderRosterCard,
-}: RosterSectionProps) {
+function RosterSection({ title, rows, renderRosterCard }: RosterSectionProps) {
   const [open, setOpen] = useState(true);
 
   if (rows.length === 0) return null;
@@ -164,12 +155,7 @@ function RosterSection({
         </span>
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <div
-          className={cn(
-            "grid grid-cols-1 gap-2 pt-2",
-            wide ? "md:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3",
-          )}
-        >
+        <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((row) => renderRosterCard(row))}
         </div>
       </CollapsiblePanel>
@@ -220,21 +206,7 @@ export function AttendanceBoard({
       new Map(initialExcusedStudents.map((entry) => [entry.student.id, entry])),
   );
   const [query, setQuery] = useState("");
-  const [showBarcodes, setShowBarcodes] = useState(false);
   const [, startTransition] = useTransition();
-
-  /** Scannable barcode under a name, for testing a scanner against the roster. */
-  function cardBarcode(student: Student) {
-    if (!showBarcodes) return null;
-    return (
-      <Barcode
-        value={student.barcode}
-        module={3}
-        height={48}
-        className="mt-2 w-fit gap-0.5 [&_figcaption]:text-[11px] [&_figcaption]:tracking-[0.25em]"
-      />
-    );
-  }
 
   /**
    * Every board click is written to the ledger. The local maps update
@@ -424,7 +396,6 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
-            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               Checked in {row.checkInTime}
               {row.checkedInBy ? ` by ${row.checkedInBy}` : ""}
@@ -453,7 +424,6 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
-            {cardBarcode(row.student)}
             <span className="text-xs">
               {row.checkInTime} &ndash; {row.checkOutTime}
               {row.checkedOutBy ? ` (out by ${row.checkedOutBy})` : ""}
@@ -487,7 +457,6 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
-            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               {excuseReasonLabels[row.reason]}
               {row.notes ? ` — ${row.notes}` : ""}
@@ -517,7 +486,6 @@ export function AttendanceBoard({
               {row.student.firstName} {row.student.lastName}
               <EnrollmentStatusBadge status={row.student.status} />
             </span>
-            {cardBarcode(row.student)}
             <span className="text-muted-foreground text-xs">
               No show{row.notes ? ` — ${row.notes}` : ""}
             </span>
@@ -545,7 +513,6 @@ export function AttendanceBoard({
             {row.student.firstName} {row.student.lastName}
             <EnrollmentStatusBadge status={row.student.status} />
           </span>
-          {cardBarcode(row.student)}
         </div>
         <Button
           variant="ghost"
@@ -613,14 +580,6 @@ export function AttendanceBoard({
                 className="pl-9"
               />
             </div>
-            <Button
-              variant={showBarcodes ? "secondary" : "outline"}
-              aria-pressed={showBarcodes}
-              onClick={() => setShowBarcodes((value) => !value)}
-            >
-              <BarcodeIcon />
-              Barcodes
-            </Button>
           </div>
 
           {totalRows === 0 ? (
@@ -632,25 +591,21 @@ export function AttendanceBoard({
               <RosterSection
                 title="Checked In"
                 rows={checkedInRows}
-                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Scheduled Today"
                 rows={scheduledRows}
-                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Active"
                 rows={activeRows}
-                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
               <RosterSection
                 title="Inactive"
                 rows={inactiveRows}
-                wide={showBarcodes}
                 renderRosterCard={renderRosterCard}
               />
             </>

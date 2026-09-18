@@ -24,8 +24,32 @@ export interface Student {
   levels: Partial<Record<Subject, string>>;
   status: StudentStatus;
   enrolledAt: string;
-  /** Value encoded on the student's printed barcode, e.g. "S10000015". */
-  barcode: string;
+}
+
+export type BarcodeVoidReason = "lost" | "damaged" | "other";
+
+export type BarcodeOwnerKind = "student" | "employee";
+
+/**
+ * A person's barcode, printed on a bag tag or staff badge. The value encodes
+ * the barcode's own serial, not the person's ID, so a lost tag can be
+ * replaced without the person's identity changing. Every student and
+ * employee has exactly one active barcode at all times; Replace voids the
+ * old one and issues the next in a single step.
+ */
+export interface Barcode {
+  /** Serial, e.g. "5000001" (students) or "10001" (employees). */
+  id: string;
+  ownerKind: BarcodeOwnerKind;
+  ownerId: string;
+  /** Printed value: prefix + serial + check digit, e.g. "S50000015". */
+  value: string;
+  /** ISO 8601 timestamp */
+  issuedAt: string;
+  issuedBy: string;
+  voidedAt?: string;
+  voidedBy?: string;
+  voidReason?: BarcodeVoidReason;
 }
 
 export type EmployeeRole = "Front Desk" | "Instructor" | "Admin";
@@ -35,8 +59,6 @@ export interface Employee {
   name: string;
   pin: string;
   role: EmployeeRole;
-  /** Value encoded on the employee's badge barcode, e.g. "E00001". */
-  barcode: string;
 }
 
 export interface Enrollment {
@@ -54,6 +76,8 @@ export type ActivityAction =
   | "Checked In"
   | "Checked Out"
   | "Picked Up"
+  | "Issued Barcode"
+  | "Voided Barcode"
   | "Marked Absent"
   | "Marked Excused"
   | "Edited Attendance Record"

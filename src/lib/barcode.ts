@@ -1,12 +1,15 @@
-import type { Employee, Student } from "@/lib/types";
+import type { BarcodeOwnerKind } from "@/lib/types";
 
 /**
- * Barcode payloads are prefixed so a scan station can tell which kind of
- * badge it just read, and end in a check digit so a misread or a typo is
- * caught by the app itself, independent of the scanner or the symbology:
+ * Barcode values are prefixed so the kiosk can tell whose barcode it just
+ * read, and end in a check digit so a misread or a typo is caught by the app
+ * itself, independent of the scanner or the symbology:
  *
- *   students   "S" + 7-digit student ID + check digit   e.g. S10000015
- *   employees  "E" + 5-digit sequence  + check digit   e.g. E000012
+ *   students   "S" + 7-digit serial + check digit   e.g. S50000015
+ *   employees  "E" + 5-digit serial + check digit   e.g. E100017
+ *
+ * The serial belongs to the barcode, not the person, so a lost tag can be
+ * replaced; see the Barcode type.
  */
 export const STUDENT_BARCODE_PREFIX = "S";
 export const EMPLOYEE_BARCODE_PREFIX = "E";
@@ -54,14 +57,10 @@ export function hasValidCheckDigit(code: string): boolean {
   return luhnCheckDigit(code.slice(0, -1)) === code.slice(-1);
 }
 
-export function studentBarcode(studentId: string): string {
-  return withCheckDigit(`${STUDENT_BARCODE_PREFIX}${studentId}`);
-}
-
-export function employeeBarcode(sequence: number): string {
-  return withCheckDigit(
-    `${EMPLOYEE_BARCODE_PREFIX}${String(sequence).padStart(5, "0")}`,
-  );
+export function barcodeValue(kind: BarcodeOwnerKind, serial: string): string {
+  const prefix =
+    kind === "student" ? STUDENT_BARCODE_PREFIX : EMPLOYEE_BARCODE_PREFIX;
+  return withCheckDigit(`${prefix}${serial}`);
 }
 
 /** Trims whitespace and upper-cases, so hand-typed codes match printed ones. */
@@ -74,59 +73,50 @@ export function normalizeBarcode(raw: string): string {
 // ---------------------------------------------------------------------------
 
 export type ParsedBarcode =
-  | { ok: true; kind: "student"; code: string; studentId: string }
-  | { ok: true; kind: "employee"; code: string }
+  | { ok: true; kind: BarcodeOwnerKind; value: string; serial: string }
   | {
       ok: false;
-      code: string;
+      value: string;
       /** "check": right shape, wrong check digit — almost always a misread. */
       reason: "format" | "check";
-      kind?: "student" | "employee";
+      kind?: BarcodeOwnerKind;
     };
 
 export function parseBarcode(raw: string): ParsedBarcode {
-  const code = normalizeBarcode(raw);
-  const student = STUDENT_BODY.exec(code);
+  const value = normalizeBarcode(raw);
+  const student = STUDENT_BODY.exec(value);
   if (student) {
-    return hasValidCheckDigit(code)
-      ? { ok: true, kind: "student", code, studentId: student[1] }
-      : { ok: false, code, reason: "check", kind: "student" };
+    return hasValidCheckDigit(value)
+      ? { ok: true, kind: "student", value, serial: student[1] }
+      : { ok: false, value, reason: "check", kind: "student" };
   }
-  const employee = EMPLOYEE_BODY.exec(code);
+  const employee = EMPLOYEE_BODY.exec(value);
   if (employee) {
-    return hasValidCheckDigit(code)
-      ? { ok: true, kind: "employee", code }
-      : { ok: false, code, reason: "check", kind: "employee" };
+    return hasValidCheckDigit(value)
+      ? { ok: true, kind: "employee", value, serial: employee[1] }
+      : { ok: false, value, reason: "check", kind: "employee" };
   }
-  return { ok: false, code, reason: "format" };
+  return { ok: false, value, reason: "format" };
 }
 
-/** Human-readable reason a code was rejected, or null if it parsed. */
+/** Human-readable reason a value was rejected, or null if it parsed. */
 export function barcodeProblem(raw: string): string | null {
   const parsed = parseBarcode(raw);
   if (parsed.ok) return null;
   if (parsed.reason === "check") {
-    return `Check digit doesn't match (read "${parsed.code}"). Likely a misread; scan again.`;
+    return `Check digit doesn't match (read "${parsed.value}"). Likely a misread; scan again.`;
   }
-  return `Not a Troop barcode (read "${parsed.code}").`;
+  return `Not a Troop barcode (read "${parsed.value}").`;
 }
 
-export function findStudentByBarcode(
-  students: readonly Student[],
-  raw: string,
-): Student | undefined {
-  const parsed = parseBarcode(raw);
-  if (!parsed.ok || parsed.kind !== "student") return undefined;
-  return students.find((student) => student.barcode === parsed.code);
-}
-
-export function findEmployeeByBarcode<T extends Pick<Employee, "barcode">>(
-  employees: readonly T[],
+/** Client-side lookup against a list that carries each person's active value. */
+export function findByBarcode<T extends { barcode: string }>(
+  people: readonly T[],
   raw: string,
 ): T | undefined {
   const parsed = parseBarcode(raw);
-  if (!parsed.ok || parsed.kind !== "employee") return undefined;
-  return employees.find((employee) => employee.barcode === parsed.code);
+  if (!parsed.ok) return undefined;
+  return people.find((person) => person.barcode === parsed.value);
 }
 
 /** Shape checks that ignore the check digit, for "wrong kind of badge" hints. */

@@ -2,7 +2,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Barcode } from "@/components/barcode";
+import { BarcodePanel, type StaffOption } from "@/components/barcode-panel";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,12 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  employees,
   enrollments,
+  getActiveBarcode,
   getActivityLog,
   getAttendanceRecords,
+  getBarcodes,
   students,
 } from "@/lib/mock-data";
 import { EXPERIMENT_DAYS } from "@/lib/schedule-experiment-utils";
@@ -150,6 +153,11 @@ export default async function StudentDetailPage(
   }));
 
   const initials = `${student.firstName[0]}${student.lastName[0]}`;
+  const barcode = getActiveBarcode("student", student.id);
+  const barcodeHistory = getBarcodes("student", student.id).filter(
+    (b) => b.voidedAt,
+  );
+  const staff: StaffOption[] = employees.map(({ id, name }) => ({ id, name }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -196,12 +204,28 @@ export default async function StudentDetailPage(
         <CardHeader>
           <CardTitle>Barcode</CardTitle>
           <CardDescription>
-            Print this for the student's folder. Scanning it at the Scan Station
-            checks them in, out, or records a pick-up.
+            Printed on the student's bag tag and scanned at the kiosk. A lost or
+            damaged tag is replaced here; the old barcode stops working the
+            moment the new one is issued.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Barcode value={student.barcode} />
+          {barcode ? (
+            <BarcodePanel
+              owner={{
+                kind: "student",
+                id: student.id,
+                name: `${student.firstName} ${student.lastName}`,
+              }}
+              barcode={barcode}
+              history={barcodeHistory}
+              staff={staff}
+            />
+          ) : (
+            <p className="text-sm text-destructive">
+              This student has no active barcode, which shouldn't happen.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -212,6 +236,7 @@ export default async function StudentDetailPage(
             <Button
               variant="outline"
               size="sm"
+              nativeButton={false}
               render={
                 <Link href={`/students/${student.id}/schedule-experiment-2`} />
               }

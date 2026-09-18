@@ -25,6 +25,7 @@ export default function EmployeesPage() {
           rowHrefBase="/employees"
           searchPlaceholder="Search employees..."
           entityLabel="employee"
+          printQueueKind="employee"
         />
       </CardContent>
     </Card>

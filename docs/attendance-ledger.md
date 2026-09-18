@@ -224,6 +224,28 @@ CREATE INDEX idx_attendance_records_open ON attendance_records (date)
 
 `date` stays a separate column on purpose, rather than being derived from `attendance_span` — it names *which schedule slot* this attendance is for (the business day), which can diverge at the edges from the literal check-in instant (a center open past midnight, say). It's set from the slot being fulfilled, never cast off the timestamp.
 
+**`barcodes` — the printed bag tags and staff badges**
+
+A barcode encodes its own *serial*, not the person's ID, so a lost tag can be replaced without the person's identity changing. Every student and employee has exactly one active barcode at all times: creating a person issues one, and *replace* voids the current one and issues the next inside one transaction. Student barcode events are appended to `activity_log` (`Issued Barcode` / `Voided Barcode`). Eligibility (inactive, on vacation) is enforced by the attendance rules, never by voiding the barcode.
+
+```sql
+CREATE TABLE barcodes (
+  id          bigint PRIMARY KEY,           -- serial; separate sequences per owner kind
+  owner_kind  text NOT NULL CHECK (owner_kind IN ('student','employee')),
+  owner_id    uuid NOT NULL,
+  value       text NOT NULL UNIQUE,         -- prefix || id || luhn check digit
+  issued_at   timestamptz NOT NULL DEFAULT now(),
+  issued_by   text NOT NULL,
+  voided_at   timestamptz,
+  voided_by   text,
+  void_reason text CHECK (void_reason IN ('lost','damaged','other'))
+);
+
+-- exactly one active barcode per person
+CREATE UNIQUE INDEX idx_barcodes_active
+  ON barcodes (owner_kind, owner_id) WHERE voided_at IS NULL;
+```
+
 **`schedule_slots` — configuration, not events**
 
 ```sql
